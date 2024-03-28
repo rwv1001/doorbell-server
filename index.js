@@ -13,7 +13,7 @@ const io = new Server(httpServer, {
 
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline'
-const port = new SerialPort({ path: '/dev/ttyS0', baudRate: 115200 });
+const port = new SerialPort({ path: '/dev/ttyUSB5', baudRate: 115200 });
 const parser =  new ReadlineParser({ delimiter: '\n'});
 port.pipe(parser);
 
@@ -27,8 +27,6 @@ init(() => {
 
 
     const output = new DigitalOutput('P1-16');
-    io.on('connection', socket => {
-    console.log(`User ${socket.id} connected`)
 
 //  output.write(true);
     parser.on("data", (line) => {console.log(line)
@@ -88,8 +86,11 @@ init(() => {
         console.log("We got something else")
         output.write(0);
         // code block
-    }
-});
+    }});
+
+
+    io.on('connection', socket => {
+    console.log(`User ${socket.id} connected`)
 });
 
 
