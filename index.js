@@ -28,6 +28,7 @@ import moment from 'moment';
 const assets_path = '/home/pi/vue3-doorbell-receiver/src/assets/';
 const TIME_OUT_DURATION = 1/2*60;
 const MESSAGE_TIME_OUT_DURATION = 10;
+const BUTTON_GENERATOR = 0;
 var message_tick = 0; 
 var current_button = 0;
 var idle = true;
@@ -58,103 +59,8 @@ init(() => {
 
 //  output.write(true);
     parser.on("data", (line) => {console.log(line)
-    switch(parseInt(line)) {
-      case 1:
-        var button_number = '1';
-        idle = false;
-        if(new_press) {
-           new_press = false;
-           let mp3_file_name = assets_path+button_number+"-WaitMsg.mp3";
-           if(fs.existsSync(mp3_file_name)) {
-             console.log("play file " +  mp3_file_name);
-             child.exec("play " + mp3_file_name + " tempo 1.2");
-           } else {
-             console.log("Can't find file" + mp3_file_name);
-           }
-        }
-        let now = new Date();
-        let new_message_remain = moment.duration(Date.parse(new_message_timeout) - now)
-        console.log("new_message_remain: " +  new_message_remain)
-        if(waiting_for_gui_response != parseInt(button_number) || new_message_remain < 0 ){
-           new_message_timeout = moment().add(MESSAGE_TIME_OUT_DURATION, 'seconds');
-           message_tick=0;
-           until = moment().add(TIME_OUT_DURATION, 'seconds');
-           waiting_for_gui_response = parseInt(button_number);
-           if(!calling_fetch){
-             calling_fetch = true; 
-             fetch('http://192.168.1.47:3000/settings/'+button_number).then(res => res.json()).then(data => {
-               button_data = data; 
-               current_message_uuid = uuid.v4();
-               const current_time = useDateFormat(useNow(), "HH:mm:ss").value;
-               let new_msg = "("+current_time+") " + button_data.RequestMsg;
-               console.log("New Message is: "+new_msg);
-               message_list.push(new_msg)
-               if(message_list.length >  MAX_MESSAGES) {
-                 message_list.splice(0,1);   
-               } 
-               mp3_message_to_browser = button_number+"-RequestMsg.mp3";
-               user_generator = 0;
-               io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
-
-               calling_fetch = false;
-             }).catch(err => console.log(err.message))
-           }
-
-        } else {
-            message_tick++;
-            if(message_tick %4 == 0) {
-                io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
-            }
-        }
-        output.write(1);
-        // code block
-        break;
-      case 2:
-        console.log("We got 2")
-        output.write(1);
-        // code block
-        break;
-      case 3:
-        console.log("We got 3")
-        output.write(1);
-        // code block
-        break;
-      case 4:
-        console.log("We got 4")
-        output.write(1);
-        // code block
-        break;
-      case 5:
-        console.log("We got 5")
-        output.write(1);
-        // code block
-        break;
-      case 6:
-        console.log("We got 6")
-        output.write(1);
-        // code block
-        break;
-      case 7:
-        console.log("We got 7")
-        output.write(1);
-        // code block
-        break;
-      case 8:
-        console.log("We got 8")
-        output.write(1);
-        // code block
-        break;
-      case 9:
-        console.log("We got 9")
-        output.write(1);
-        // code block
-        break;
-      case 10:
-        console.log("We got 10")
-        output.write(1);
-        // code block
-        break;
-      default:
+    
+    if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
         if(idle == false) {
            let now = new Date();
            let remaining = moment.duration(Date.parse(until) - now)
@@ -183,14 +89,26 @@ init(() => {
 
         console.log("We got something else")
         output.write(0);
-        // code block
-    }});
+
+    }
+    else {
+        buttonPress(parseInt(line).toString(),output)
+    }
+
+    });
 
 
     io.on('connection', socket => {
       console.log(`User ${socket.id} connected`)
       socket.on('answered', (id)=> {
         console.log('Answered received with id '+ id);
+        fetch('http://192.168.1.47:3000/settings/'+id).then(res => res.json()).then(user_data => {
+           addMessage(user_data.ResponseMsg, id+"-ResponseMsg.mp3", id)
+        }).catch(err => console.log(err.message))
+        if(!call_in_progress){
+           let mp3_file_name = assets_path+id+"-ReplyMsg.mp3";
+           playMP3(mp3_file_name)
+        }
         
       });
 
@@ -256,6 +174,62 @@ init(() => {
 //    })
     
 })
+function buttonPress(button_number, output){
+        idle = false;
+        if(new_press) {
+           new_press = false;
+           let mp3_file_name = assets_path+button_number+"-WaitMsg.mp3";
+           playMP3(mp3_file_name)
+        }
+        let now = new Date();
+        let new_message_remain = moment.duration(Date.parse(new_message_timeout) - now)
+        console.log("new_message_remain: " +  new_message_remain)
+        if(waiting_for_gui_response != parseInt(button_number) || new_message_remain < 0 ){
+           new_message_timeout = moment().add(MESSAGE_TIME_OUT_DURATION, 'seconds');
+           message_tick=0;
+           until = moment().add(TIME_OUT_DURATION, 'seconds');
+           waiting_for_gui_response = parseInt(button_number);
+           if(!calling_fetch){
+             calling_fetch = true;
+             fetch('http://192.168.1.47:3000/settings/'+button_number).then(res => res.json()).then(button_data => {
+               addMessage(button_data.RequestMsg, button_number+"-RequestMsg.mp3", BUTTON_GENERATOR)
+               calling_fetch = false;
+             }).catch(err => console.log(err.message))
+           }
+
+        } else {
+            message_tick++;
+            if(message_tick %4 == 0) {
+                io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
+            }
+        }
+        output.write(1);
+} 
+
+
+
+function addMessage(text_msg, mp3_message_to_browser, user_generator){
+           current_message_uuid = uuid.v4();
+           const current_time = useDateFormat(useNow(), "HH:mm:ss").value;
+           let new_msg = "("+current_time+") " + text_msg;
+           console.log("New Message is: "+new_msg);
+           console.log("mp3 to browser is: "+ mp3_message_to_browser+", and usergenerator is " + user_generator);
+           message_list.push(new_msg)
+           if(message_list.length >  MAX_MESSAGES) {
+              message_list.splice(0,1);
+           }
+           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
+}
+
+function playMP3(mp3_file_name){
+           if(fs.existsSync(mp3_file_name)) {
+             console.log("play file " +  mp3_file_name);
+             child.exec("play " + mp3_file_name + " tempo 1.2");
+           } else {
+             console.log("Can't find file" + mp3_file_name);
+           }
+}
+
 
 function generateMP3(arg1, arg2){
    console.log("arg1: "+ arg1);
