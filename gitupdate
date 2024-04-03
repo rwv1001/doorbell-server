@@ -1,0 +1,4 @@
+#!/bin/bash
+git add -A
+git commit -m 'New Deployment'
+git push -f git@github.com:rwv1001/doorbell-server.git
