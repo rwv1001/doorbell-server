@@ -173,8 +173,7 @@ port.pipe(parser);
            ResponseMsg:newData.ResponseMsg,
            Phone:newData.Phone,
            PhoneNumber:newData.PhoneNumber
-          }).then(respone => console.log(response.data))
-            .catch(error => console.error(error));
+          }).catch(error => console.error(error));
       });
       
     });
