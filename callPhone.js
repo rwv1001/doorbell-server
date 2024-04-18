@@ -18,38 +18,50 @@ import * as child from 'child_process';
 
 
 init(() => {
-    var usb_path = '';
-    child.exec("./findFTDI", (error, stdout, stderr)=>{
-    
-    console.log("Error is: "+ error);
-    console.log("Stdout is: " + stdout);
-    console.log("sterr is: "+stderr);
-    if(stdout){
-      usb_path = stdout;
-    }
-
-    });
-    console.log('The usb path is now: '+usb_path);
-
-    const output = new DigitalOutput('P1-16');
+    const relay = new DigitalOutput('P1-18');
+    sim_power_on()
     console.log('start listening on serial')
-    parser.on("data", (line) => {console.log(line)
-    switch(parseInt(line)) {
-      case 1:
-        console.log("We got 1")
-        output.write(1);
-        io.emit('message', `We got 1`)
-        // code block
-        break;
-      default:
-        console.log("We got something else")
-        output.write(0);
-        // code block
-    }
-});
+    parser.on("data", (line) => {
+      console.log("data, got line: " + line)
+      if(line.startsWith("VOICE CALL: BEGIN")) {
+         relay.write(1);
+      }
+      if(line.startsWith("VOICE CALL: END")) {
+         relay.write(0);
+      }
+    });
+    setTimeout(() => {
+      console.log("Let's try to make a call");
+      port.write(`AT+CLVL=2\r\n`);
+      setTimeout(() => {
+       port.write(`ATD${phone_number};\r\n`);
+       setTimeout(() => { 
+         console.log("Writing AT+CECH=?\r\n");
+         port.write(`AT+SIDET=0\r\n`);
+       }, 15000)
+      },2000)
+
+    }, 24000)
 });
 
-function sim_power_on(power_key){
+function sim_power_on(){
+    const output = new DigitalOutput('P1-31');
+    //const relay = new DigitalOutput('P1-18');
+
+    console.log('begin sim_power_on()')
+    setTimeout(() => {
+      output.write(1);
+      console.log('set to HIGH')
+      //relay.write(1);
+      setTimeout(() => {
+        output.write(0)
+        console.log('set to LOW')
+        //relay.write(0)
+        setTimeout(() => {
+        console.log('SIM7600X is ready')
+        }, 20000)
+      },2000)  
+    }, 100)
 
 
 }

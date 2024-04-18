@@ -54,7 +54,7 @@ var heart_beat_tick = 0;
 
 getFTDIPath().then(
 FTDIPath => {console.log("getFTDIPath() return "+ FTDIPath)
-//FTDIPath = '/dev/ttyUSB0'
+FTDIPath = '/dev/ttyS0'
 setTimeout(() => {console.log("1 second timeout")
 init(() => {
     const output = new DigitalOutput('P1-16');
@@ -113,7 +113,7 @@ port.pipe(parser);
       console.log(`User ${socket.id} connected`)
       socket.on('answered', (id)=> {
         console.log('Answered received with id '+ id);
-        fetch('http://192.168.1.47:3000/settings/'+id).then(res => res.json()).then(user_data => {
+        fetch('http://cambdoorbell.duckdns.org:3000/settings/'+id).then(res => res.json()).then(user_data => {
            addMessage(user_data.ResponseMsg, id+"-ResponseMsg.mp3", id)
         }).catch(err => console.log(err.message))
         if(!call_in_progress){
@@ -164,16 +164,17 @@ port.pipe(parser);
           generateMP3(arg1, arg2);
         }
      
-
-        const result = axios.put("http://192.168.1.47:3000/settings/"+id,{
-          name:newData.name,
-          RequestMsg:newData.RequestMsg,
-          WaitMsg:newData.WaitMsg,
-          ReplyMsg:newData.ReplyMsg,
-          ResponseMsg:newData.ResponseMsg,
-          Phone:newData.Phone,
-          PhoneNumber:newData.PhoneNumber
-        });
+        
+         const result = axios.put("http://cambdoorbell.duckdns.org:3000/settings/"+id,{
+           name:newData.name,
+           RequestMsg:newData.RequestMsg,
+           WaitMsg:newData.WaitMsg,
+           ReplyMsg:newData.ReplyMsg,
+           ResponseMsg:newData.ResponseMsg,
+           Phone:newData.Phone,
+           PhoneNumber:newData.PhoneNumber
+          }).then(respone => console.log(response.data))
+            .catch(error => console.error(error));
       });
       
     });
@@ -239,7 +240,7 @@ function buttonPress(button_number, output){
            waiting_for_gui_response = parseInt(button_number);
            if(!calling_fetch){
              calling_fetch = true;
-             fetch('http://192.168.1.47:3000/settings/'+button_number).then(res => res.json()).then(button_data => {
+             fetch('http://cambdoorbell.duckdns.org:3000/settings/'+button_number).then(res => res.json()).then(button_data => {
                addMessage(button_data.RequestMsg, button_number+"-RequestMsg.mp3", BUTTON_GENERATOR)
                calling_fetch = false;
              }).catch(err => console.log(err.message))

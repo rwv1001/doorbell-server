@@ -1,0 +1,13 @@
+[Unit]
+Description=My Custom Service
+After=network.target
+
+[Service]
+ExecStart=/home/pi/server/doorbell_server.sh
+User=root
+Group=root
+Restart=always
+StartLimitInterval=30
+
+[Install]
+WantedBy=multi-user.target
