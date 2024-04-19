@@ -1,4 +1,4 @@
-import { createServer } from "http"
+import { createServer } from "http";
 import { Server } from "socket.io"
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline'
@@ -17,11 +17,12 @@ import util from "util";
 
 
 const exec = util.promisify(child.exec);
-const httpServer = createServer()
+const httpServer = createServer();
 
 const io = new Server(httpServer, {
     cors: {
-        origin: "*"
+        origin: ["https://cambdoorbell.duckdns.org","http://cambdoorbell.duckdns.org:8080","http://192.168.1.47:8080"]
+//          origin: "*"
     }
 })
 
