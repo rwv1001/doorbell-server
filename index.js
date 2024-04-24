@@ -29,6 +29,7 @@ const io = new Server(httpServer, {
 
 const assets_path = '/home/pi/vue3-doorbell-receiver/src/assets/';
 const TIME_OUT_DURATION = 1/2*60;
+const INTERCOM_TIME_OUT_DURATION = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 var message_tick = 0; 
@@ -128,10 +129,14 @@ port.pipe(parser);
       socket.on('updateIntercomClientId', (newIntercomClientId,  currentUserId) => {
         console.log('updatingClientId to '+ newIntercomClientId)
         console.log('currentUserId for intercom is '+ currentUserId)
+        
         intercomClientId = newIntercomClientId;
-        fetch('http://cambdoorbell.duckdns.org:3000/settings/'+currentUserId).then(res => res.json()).then(user_data => {
-           addMessage(user_data.IntercomMsg, currentUserId+"-IntercomMsg.mp3", currentUserId)
-        }).catch(err => console.log(err.message))
+        if(newIntercomClientId != 0) {
+          until = moment().add(INTERCOM_TIME_OUT_DURATION, 'seconds');
+          fetch('http://cambdoorbell.duckdns.org:3000/settings/'+currentUserId).then(res => res.json()).then(user_data => {
+             addMessage(user_data.IntercomMsg, currentUserId+"-IntercomMsg.mp3", currentUserId)
+          }).catch(err => console.log(err.message))
+        }
       });
 
       socket.on('updateSettings', (id, newJSONData, oldJSONData) => {
