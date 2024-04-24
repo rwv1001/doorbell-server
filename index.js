@@ -21,7 +21,7 @@ const httpServer = createServer();
 
 const io = new Server(httpServer, {
     cors: {
-        origin: ["https://cambdoorbell.duckdns.org","http://cambdoorbell.duckdns.org:8080","http://192.168.1.47:8080"]
+        origin: ["https://cambdoorbell.duckdns.org","http://cambdoorbell.duckdns.org:8080","http://192.168.1.47:8080", "https://192.168.1.47:8080"]
 //          origin: "*"
     }
 })
@@ -43,6 +43,7 @@ var gui_no_response = 0;
 var time_out_time = 0;
 var button_data = null;
 var message_list = [];
+var intercomClientId = 0;
 var current_message_uuid = 0;
 var calling_fetch = false;
 var until = new Date(); 
@@ -79,7 +80,7 @@ port.pipe(parser);
            if(remaining > 0){
               message_tick++;
               if(message_tick %4 == 0) {
-                 io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
+                 io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId)
               }
            } else {
               idle = true;
@@ -94,6 +95,7 @@ port.pipe(parser);
               button_data = null;
               message_list = [];
               current_message_uuid = 0;
+              intercomClientId = 0;
               io.emit('doorbell_idle')
            }
         }
@@ -123,7 +125,14 @@ port.pipe(parser);
         }
         
       });
-
+      socket.on('updateIntercomClientId', (newIntercomClientId,  currentUserId) => {
+        console.log('updatingClientId to '+ newIntercomClientId)
+        console.log('currentUserId for intercom is '+ currentUserId)
+        intercomClientId = newIntercomClientId;
+        fetch('http://cambdoorbell.duckdns.org:3000/settings/'+currentUserId).then(res => res.json()).then(user_data => {
+           addMessage(user_data.IntercomMsg, currentUserId+"-IntercomMsg.mp3", currentUserId)
+        }).catch(err => console.log(err.message))
+      });
 
       socket.on('updateSettings', (id, newJSONData, oldJSONData) => {
         console.log('update settings please!')
@@ -164,7 +173,12 @@ port.pipe(parser);
           var arg2 = id+"-ResponseMsg.mp3";
           generateMP3(arg1, arg2);
         }
-     
+        if(newData.IntercomMsg!=oldData.IntercomMsg) {
+          console.log("IntercomMsg has changed to "+ newData.IntercomMsg);
+          var arg1 = newData.IntercomMsg;
+          var arg2 = id+"-IntercomMsg.mp3";
+          generateMP3(arg1, arg2);
+        }     
         
          const result = axios.put("http://cambdoorbell.duckdns.org:3000/settings/"+id,{
            name:newData.name,
@@ -172,6 +186,7 @@ port.pipe(parser);
            WaitMsg:newData.WaitMsg,
            ReplyMsg:newData.ReplyMsg,
            ResponseMsg:newData.ResponseMsg,
+           IntercomMsg:newData.IntercomMsg,
            Phone:newData.Phone,
            PhoneNumber:newData.PhoneNumber
           }).catch(error => console.error(error));
@@ -249,7 +264,7 @@ function buttonPress(button_number, output){
         } else {
             message_tick++;
             if(message_tick %4 == 0) {
-                io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
+                io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId )
             }
         }
         output.write(1);
@@ -267,7 +282,7 @@ function addMessage(text_msg, mp3_message_to_browser, user_generator){
            if(message_list.length >  MAX_MESSAGES) {
               message_list.splice(0,1);
            }
-           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator)
+           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId)
 }
 
 function playMP3(mp3_file_name){
