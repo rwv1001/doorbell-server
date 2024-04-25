@@ -32,6 +32,7 @@ const TIME_OUT_DURATION = 1/2*60;
 const INTERCOM_TIME_OUT_DURATION = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
+const CALL_FETCH_TIMEOUT = 3000;
 var message_tick = 0; 
 var current_button = 0;
 var idle = true;
@@ -75,29 +76,37 @@ port.pipe(parser);
     } 
  
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
+        console.log("Either line not a number or is outside of range")
         if(idle == false) {
+           console.log("The doorbell is currently not idle. calling_fetch = " + calling_fetch)
            let now = new Date();
            let remaining = moment.duration(Date.parse(until) - now)
-           if(remaining > 0){
+           console.log("The remaining time for emitting message list is "+ remaining)
+           if(remaining > 0  ){
               message_tick++;
               if(message_tick %4 == 0) {
                  io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId)
               }
            } else {
-              idle = true;
-              message_list = [];
-              waiting_for_gui_response = 0;
-              waiting_for_call_response = 0;
-              gui_responded = 0;
-              call_in_progress = 0;
-              call_not_answered = 0;
-              gui_no_response = 0;
-              time_out_time = 0;
-              button_data = null;
-              message_list = [];
-              current_message_uuid = 0;
-              intercomClientId = 0;
-              io.emit('doorbell_idle')
+              if(!calling_fetch || (calling_fetch && remaining <-CALL_FETCH_TIMEOUT))
+              {
+                console.log("idle: calling fetch set to false")
+                idle = true;
+                calling_fetch = false;
+                message_list = [];
+                waiting_for_gui_response = 0;
+                waiting_for_call_response = 0;
+                gui_responded = 0;
+                call_in_progress = 0;
+                call_not_answered = 0;
+                gui_no_response = 0;
+                time_out_time = 0;
+                button_data = null;
+                message_list = [];
+                current_message_uuid = 0;
+                intercomClientId = 0;
+                io.emit('doorbell_idle')
+              }
            }
         }
         new_press = true;
@@ -117,8 +126,12 @@ port.pipe(parser);
       console.log(`User ${socket.id} connected`)
       socket.on('answered', (id)=> {
         console.log('Answered received with id '+ id);
+        console.log("answered: calling fetch set to true")
+        calling_fetch = true;
         fetch('http://cambdoorbell.duckdns.org:3000/settings/'+id).then(res => res.json()).then(user_data => {
            addMessage(user_data.ResponseMsg, id+"-ResponseMsg.mp3", id)
+           console.log("answered: calling fetch set to false")
+           calling_fetch = false;
         }).catch(err => console.log(err.message))
         if(!call_in_progress){
            let mp3_file_name = assets_path+id+"-ReplyMsg.mp3";
@@ -133,8 +146,12 @@ port.pipe(parser);
         intercomClientId = newIntercomClientId;
         if(newIntercomClientId != 0) {
           until = moment().add(INTERCOM_TIME_OUT_DURATION, 'seconds');
+          console.log("updateIntercomClientId: calling fetch set to true")
+          calling_fetch = true;
           fetch('http://cambdoorbell.duckdns.org:3000/settings/'+currentUserId).then(res => res.json()).then(user_data => {
              addMessage(user_data.IntercomMsg, currentUserId+"-IntercomMsg.mp3", currentUserId)
+             calling_fetch = false;
+             console.log("updateIntercomClientId: calling fetch set to false")
           }).catch(err => console.log(err.message))
         }
       });
@@ -258,10 +275,13 @@ function buttonPress(button_number, output){
            message_tick=0;
            until = moment().add(TIME_OUT_DURATION, 'seconds');
            waiting_for_gui_response = parseInt(button_number);
+           console.log("waiting for gui response: "+waiting_for_gui_response)
            if(!calling_fetch){
+             console.log("buttonPress: calling_fetch set to true");
              calling_fetch = true;
              fetch('http://cambdoorbell.duckdns.org:3000/settings/'+button_number).then(res => res.json()).then(button_data => {
                addMessage(button_data.RequestMsg, button_number+"-RequestMsg.mp3", BUTTON_GENERATOR)
+               console.log("buttonPress: calling_fetch set to false");
                calling_fetch = false;
              }).catch(err => console.log(err.message))
            }
@@ -277,17 +297,17 @@ function buttonPress(button_number, output){
 
 
 
-function addMessage(text_msg, mp3_message_to_browser, user_generator){
+function addMessage(text_msg, mp3_message_to_browser_, user_generator){
            current_message_uuid = uuid.v4();
            const current_time = useDateFormat(useNow(), "HH:mm:ss").value;
            let new_msg = "("+current_time+") " + text_msg;
            console.log("New Message is: "+new_msg);
-           console.log("mp3 to browser is: "+ mp3_message_to_browser+", and usergenerator is " + user_generator);
+           console.log("mp3 to browser is: "+ mp3_message_to_browser_+", and usergenerator is " + user_generator);
            message_list.push(new_msg)
            if(message_list.length >  MAX_MESSAGES) {
               message_list.splice(0,1);
            }
-           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId)
+           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser_, user_generator, intercomClientId)
 }
 
 function playMP3(mp3_file_name){
