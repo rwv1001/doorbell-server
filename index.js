@@ -33,21 +33,15 @@ const INTERCOM_TIME_OUT_DURATION = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const CALL_FETCH_TIMEOUT = 3000;
+const ASSETS_DIR = "/home/pi/vue3-doorbell-receiver/src/assets/"
 var message_tick = 0; 
-var current_button = 0;
 var idle = true;
+var request_answered = false;
+var current_button = 0;
 var waiting_for_gui_response = 0;
-var waiting_for_call_response = 0;
-var gui_responded = 0;
-var call_in_progress = 0;
-var call_not_answered = 0;
-var gui_no_response = 0;
-var time_out_time = 0;
-var button_data = null;
 var message_list = [];
 var intercomClientId = 0;
 var current_message_uuid = 0;
-var calling_fetch = false;
 var until = new Date(); 
 var new_press = true;
 var new_message_timeout= moment();
@@ -55,6 +49,21 @@ var mp3_message_to_browser ='';
 var user_generator = 0;
 const MAX_MESSAGES = 5;
 var heart_beat_tick = 0;
+const names = [];
+const RequestMsgs = [];
+const WaitMsgs = [];
+const ReplyMsgs = [];
+const ResponseMsgs = [];
+const IntercomMsgs = [];
+const NoAnswerFiles = [];
+const RequestMsgFiles = [];
+const WaitMsgFiles = [];
+const ReplyMsgFiles = [];
+const ResponseMsgFiles = [];
+const IntercomMsgFiles = [];
+var loaded_json_data = false
+
+
 
 getFTDIPath().then(
 FTDIPath => {console.log("getFTDIPath() return "+ FTDIPath)
@@ -64,8 +73,60 @@ init(() => {
     const output = new DigitalOutput('P1-16');
     const port = new SerialPort({ path: FTDIPath, baudRate: 115200 });
     const parser =  new ReadlineParser({ delimiter: '\n'});
-port.pipe(parser);
+    port.pipe(parser);
+    fetch('http://cambdoorbell.duckdns.org:3000/settings').then(res => res.json()).then(data => {
+      data.forEach(value =>{
+         names.push(value["name"])
+         RequestMsgs.push(value["RequestMsg"])
+         WaitMsgs.push(value["WaitMsg"])
+         ReplyMsgs.push(value["ReplyMsg"])
+         ResponseMsgs.push(value["ResponseMsg"])
+         IntercomMsgs.push(value["IntercomMsg"])
+         NoAnswerFiles.push(value["NoAnswerFile"])
+         RequestMsgFiles.push(value["RequestMsgFile"])
+         WaitMsgFiles.push(value["WaitMsgFile"])
+         ReplyMsgFiles.push(value["ReplyMsgFile"])
+         ResponseMsgFiles.push(value["ResponseMsgFile"])
+         IntercomMsgFiles.push(value["IntercomMsgFile"])
+      })
+      names.forEach(value=> {
+         console.log(value)
+      })
+      RequestMsgs.forEach(value=> {
+         console.log(value)
+      })
+      WaitMsgs.forEach(value=> {
+         console.log(value)
+      })
+      ReplyMsgs.forEach(value=> {
+         console.log(value)
+      })
+      ResponseMsgs.forEach(value=> {
+         console.log(value)
+      })
+      IntercomMsgs.forEach(value=> {
+         console.log(value)
+      })
+      RequestMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      WaitMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      ReplyMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      ResponseMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      IntercomMsgFiles.forEach(value=> {
+         console.log(value)
+      })
 
+      console.log("loaded json data");
+      loaded_json_data = true;
+    }).catch(err => console.log(err.message))
+    
 
 //  output.write(true);
     parser.on("data", (line) => {console.log(line)
@@ -78,7 +139,6 @@ port.pipe(parser);
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
         console.log("Either line not a number or is outside of range")
         if(idle == false) {
-           console.log("The doorbell is currently not idle. calling_fetch = " + calling_fetch)
            let now = new Date();
            let remaining = moment.duration(Date.parse(until) - now)
            console.log("The remaining time for emitting message list is "+ remaining)
@@ -88,25 +148,20 @@ port.pipe(parser);
                  io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser, user_generator, intercomClientId)
               }
            } else {
-              if(!calling_fetch || (calling_fetch && remaining <-CALL_FETCH_TIMEOUT))
-              {
-                console.log("idle: calling fetch set to false")
+                if(!request_answered) {
+                   let mp3_file_name = assets_path+NoAnswerFiles[current_button-1];
+                   playMP3(mp3_file_name)
+                }
+                request_answered = false;
+                console.log("now idle")
+                current_button = 0;
                 idle = true;
-                calling_fetch = false;
                 message_list = [];
                 waiting_for_gui_response = 0;
-                waiting_for_call_response = 0;
-                gui_responded = 0;
-                call_in_progress = 0;
-                call_not_answered = 0;
-                gui_no_response = 0;
-                time_out_time = 0;
-                button_data = null;
                 message_list = [];
                 current_message_uuid = 0;
                 intercomClientId = 0;
                 io.emit('doorbell_idle')
-              }
            }
         }
         new_press = true;
@@ -126,33 +181,27 @@ port.pipe(parser);
       console.log(`User ${socket.id} connected`)
       socket.on('answered', (id)=> {
         console.log('Answered received with id '+ id);
-        console.log("answered: calling fetch set to true")
-        calling_fetch = true;
-        fetch('http://cambdoorbell.duckdns.org:3000/settings/'+id).then(res => res.json()).then(user_data => {
-           addMessage(user_data.ResponseMsg, id+"-ResponseMsg.mp3", id)
-           console.log("answered: calling fetch set to false")
-           calling_fetch = false;
-        }).catch(err => console.log(err.message))
-        if(!call_in_progress){
-           let mp3_file_name = assets_path+id+"-ReplyMsg.mp3";
-           playMP3(mp3_file_name)
+        request_answered = true;
+        if(loaded_json_data) {
+          console.log("answered: json data available")
+          addMessage(ResponseMsgs[id-1], ResponseMsgFiles[id-1], id)
+          
+          let mp3_file_name = assets_path+ReplyMsgFiles[id-1];
+          playMP3(mp3_file_name)          
         }
-        
       });
       socket.on('updateIntercomClientId', (newIntercomClientId,  currentUserId) => {
         console.log('updatingClientId to '+ newIntercomClientId)
         console.log('currentUserId for intercom is '+ currentUserId)
-        
+        request_answered = true;
         intercomClientId = newIntercomClientId;
         if(newIntercomClientId != 0) {
           until = moment().add(INTERCOM_TIME_OUT_DURATION, 'seconds');
           console.log("updateIntercomClientId: calling fetch set to true")
-          calling_fetch = true;
-          fetch('http://cambdoorbell.duckdns.org:3000/settings/'+currentUserId).then(res => res.json()).then(user_data => {
-             addMessage(user_data.IntercomMsg, currentUserId+"-IntercomMsg.mp3", currentUserId)
-             calling_fetch = false;
-             console.log("updateIntercomClientId: calling fetch set to false")
-          }).catch(err => console.log(err.message))
+          if(loaded_json_data) {
+            console.log("answered: json data available")
+            addMessage(IntercomMsgs[currentUserId-1], IntercomMsgFiles[currentUserId-1], currentUserId)
+          }
         }
       });
 
@@ -168,40 +217,82 @@ port.pipe(parser);
         if(newData.name!= oldData.name) {
           console.log("name has changed to "+ newData.name);
           var arg1 = newData.name + " did not answer. Please try someone else.";
-          var arg2 = id+"-noAnswer.mp3"
+          var arg2 = id+"-noAnswer-"+getRandomNumber()+".mp3"
+          newData.noAnswerFile = arg2;
+          NoAnswerFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-noAnswer-*");
+          child.exec("rm -f " +assets_path+ id+"-noAnswer-*");
           generateMP3(arg1, arg2);
-        }
+        } else {
+          newData.noAnswerFile=NoAnswerFiles[id-1];
+        } 
         if(newData.RequestMsg!= oldData.RequestMsg) {
           console.log("RequestMsg has changed to "+ newData.RequestMsg);
           var arg1 = newData.RequestMsg;
-          var arg2 = id+"-RequestMsg.mp3";
-          generateMP3(arg1, arg2);
+          RequestMsgs[id-1] = arg1;
+          var arg2 = id+"-RequestMsg-"+getRandomNumber()+".mp3";
+          newData.RequestMsgFile = arg2;
+          RequestMsgFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-RequestMsg-*");
+          child.exec("rm -f " +assets_path+ id+"-RequestMsg-*");
+           generateMP3(arg1, arg2);
+        } else {
+          console.log("I am here!")
+          newData.RequestMsgFile=RequestMsgFiles[id-1];
         }
         if(newData.WaitMsg!=oldData.WaitMsg) {
           console.log("WaitMsg has changed to "+ newData.WaitMsg);
           var arg1 = newData.WaitMsg;
-          var arg2 = id+"-WaitMsg.mp3";
+          WaitMsgs[id-1] = arg1;
+          var arg2 = id+"-WaitMsg-"+getRandomNumber()+".mp3";
+          newData.WaitMsgFile = arg2;
+          WaitMsgFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-WaitMsg-*");
+          child.exec("rm -f " +assets_path+ id+"-WaitMsg-*");
           generateMP3(arg1, arg2);
+        } else {
+          newData.WaitMsgFile=WaitMsgFiles[id-1];
         }
         if(newData.ReplyMsg!=oldData.ReplyMsg) {
           console.log("ReplyMsg has changed to "+ newData.ReplyMsg);
           var arg1 = newData.ReplyMsg;
-          var arg2 = id+"-ReplyMsg.mp3";
+          ReplyMsgs[id -1] = arg1;
+          var arg2 = id+"-ReplyMsg-"+getRandomNumber()+".mp3";
+          newData.ReplyMsgFile = arg2;
+          ReplyMsgFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-ReplyMsg-*");
+          child.exec("rm -f " +assets_path+ id+"-ReplyMsg-*");
           generateMP3(arg1, arg2);
+        } else {
+          newData.ReplyMsgFile=ReplyMsgFiles[id-1];
         }
         if(newData.ResponseMsg!=oldData.ResponseMsg) {
           console.log("ResponseMsg has changed to "+ newData.ResponseMsg);
           var arg1 = newData.ResponseMsg;
-          var arg2 = id+"-ResponseMsg.mp3";
+          ResponseMsgs[id-1] = arg1;
+          var arg2 = id+"-ResponseMsg-"+getRandomNumber()+".mp3";
+          newData.ResponseMsgFile = arg2;
+          ResponseMsgFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-ResponseMsg-*");
+          child.exec("rm -f " +assets_path+ id+"-ResponseMsg-*");
           generateMP3(arg1, arg2);
+        } else {
+          newData.ResponseMsgFile=ResponseMsgFiles[id-1];
         }
         if(newData.IntercomMsg!=oldData.IntercomMsg) {
           console.log("IntercomMsg has changed to "+ newData.IntercomMsg);
           var arg1 = newData.IntercomMsg;
-          var arg2 = id+"-IntercomMsg.mp3";
+          IntercomMsgs[id-1] = arg1;
+          var arg2 = id+"-IntercomMsg-"+getRandomNumber()+".mp3";
+          newData.IntercomMsgFile = arg2;
+          IntercomMsgFiles[id-1] = arg2;
+          console.log("calling: rm -f "+ assets_path+id+"-IntercomMsg-*");
+          child.exec("rm -f " +assets_path+ id+"-IntercomMsg-*");
           generateMP3(arg1, arg2);
+        } else {
+          newData.IntercomMsgFile=IntercomMsgFiles[id-1];
         }     
-        
+        console.log("Axios update")
          const result = axios.put("http://cambdoorbell.duckdns.org:3000/settings/"+id,{
            name:newData.name,
            RequestMsg:newData.RequestMsg,
@@ -209,8 +300,14 @@ port.pipe(parser);
            ReplyMsg:newData.ReplyMsg,
            ResponseMsg:newData.ResponseMsg,
            IntercomMsg:newData.IntercomMsg,
+           NoAnswerFile:newData.noAnswerFile,
+           RequestMsgFile:newData.RequestMsgFile,
+           WaitMsgFile:newData.WaitMsgFile,
+           ReplyMsgFile:newData.ReplyMsgFile,
+           ResponseMsgFile:newData.ResponseMsgFile,
+           IntercomMsgFile:newData.IntercomMsgFile,
            Phone:newData.Phone,
-           PhoneNumber:newData.PhoneNumber
+           PhoneNumber:newData.PhoneNumber,
           }).catch(error => console.error(error));
       });
       
@@ -256,15 +353,20 @@ async function getFTDIPath() {
         return null;
     }
 }
-
-
-
+function getRandomNumber() {
+    // Generate a random integer between 1 and 9 (inclusive)
+    const min = 100000;
+    const max = 999999;
+    const randomNumber = Math.floor(Math.random() * (max - min + 1)) + min;
+    return randomNumber;
+}
 
 function buttonPress(button_number, output){
         idle = false;
         if(new_press) {
            new_press = false;
-           let mp3_file_name = assets_path+button_number+"-WaitMsg.mp3";
+           current_button = button_number;
+           let mp3_file_name = assets_path+WaitMsgFiles[button_number-1];
            playMP3(mp3_file_name)
         }
         let now = new Date();
@@ -276,16 +378,9 @@ function buttonPress(button_number, output){
            until = moment().add(TIME_OUT_DURATION, 'seconds');
            waiting_for_gui_response = parseInt(button_number);
            console.log("waiting for gui response: "+waiting_for_gui_response)
-           if(!calling_fetch){
-             console.log("buttonPress: calling_fetch set to true");
-             calling_fetch = true;
-             fetch('http://cambdoorbell.duckdns.org:3000/settings/'+button_number).then(res => res.json()).then(button_data => {
-               addMessage(button_data.RequestMsg, button_number+"-RequestMsg.mp3", BUTTON_GENERATOR)
-               console.log("buttonPress: calling_fetch set to false");
-               calling_fetch = false;
-             }).catch(err => console.log(err.message))
+           if(loaded_json_data) {
+               addMessage(RequestMsgs[button_number-1], RequestMsgFiles[button_number-1], BUTTON_GENERATOR)
            }
-
         } else {
             message_tick++;
             if(message_tick %4 == 0) {
@@ -297,17 +392,17 @@ function buttonPress(button_number, output){
 
 
 
-function addMessage(text_msg, mp3_message_to_browser_, user_generator){
+function addMessage(text_msg, mp3message_to_browser, user_generator){
            current_message_uuid = uuid.v4();
            const current_time = useDateFormat(useNow(), "HH:mm:ss").value;
            let new_msg = "("+current_time+") " + text_msg;
            console.log("New Message is: "+new_msg);
-           console.log("mp3 to browser is: "+ mp3_message_to_browser_+", and usergenerator is " + user_generator);
+           console.log("mp3 to browser is: "+ mp3message_to_browser+", and usergenerator is " + user_generator);
            message_list.push(new_msg)
            if(message_list.length >  MAX_MESSAGES) {
               message_list.splice(0,1);
            }
-           io.emit('message_list', current_message_uuid, message_list, mp3_message_to_browser_, user_generator, intercomClientId)
+           io.emit('message_list', current_message_uuid, message_list, mp3message_to_browser, user_generator, intercomClientId)
 }
 
 function playMP3(mp3_file_name){
@@ -326,7 +421,7 @@ function generateMP3(arg1, arg2){
  
    let options={
          scriptPath: "/home/pi/server",
-         args:[arg1, "/home/pi/vue3-doorbell-receiver/src/assets/"+arg2]
+         args:[arg1, ASSETS_DIR+arg2]
        }
        PythonShell.run("TextToAudio.py", options, (err,res)=>{
          if(err){
