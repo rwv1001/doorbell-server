@@ -64,11 +64,11 @@ const IntercomMsgFiles = [];
 var loaded_json_data = false
 
 //const audioContext = new AudioContext();
-//const fileReader = new FileReader();
-
+const fileReader = new FileReader();
+var arrayBuffer;
 // Set up file reader on loaded end event
-//fileReader.onloadend = () => {
-//    const arrayBuffer = fileReader.result
+fileReader.onload = (event) => {
+     arrayBuffer = event.target.result;
     // Convert array buffer into audio buffer
 ///    audioContext.decodeAudioData(arrayBuffer, (audioBuffer) => {    
       // Do something with audioBuffer
@@ -86,17 +86,67 @@ init(() => {
     const port = new SerialPort({ path: FTDIPath, baudRate: 115200 });
     const parser =  new ReadlineParser({ delimiter: '\n'});
     port.pipe(parser);
-    fetchData()
+    fetch('http://cambdoorbell.duckdns.org:3000/settings').then(res => res.json()).then(data => {
+      data.forEach(value =>{
+         names.push(value["name"])
+         RequestMsgs.push(value["RequestMsg"])
+         WaitMsgs.push(value["WaitMsg"])
+         ReplyMsgs.push(value["ReplyMsg"])
+         ResponseMsgs.push(value["ResponseMsg"])
+         IntercomMsgs.push(value["IntercomMsg"])
+         NoAnswerFiles.push(value["NoAnswerFile"])
+         RequestMsgFiles.push(value["RequestMsgFile"])
+         WaitMsgFiles.push(value["WaitMsgFile"])
+         ReplyMsgFiles.push(value["ReplyMsgFile"])
+         ResponseMsgFiles.push(value["ResponseMsgFile"])
+         IntercomMsgFiles.push(value["IntercomMsgFile"])
+      })
+      names.forEach(value=> {
+         console.log(value)
+      })
+      RequestMsgs.forEach(value=> {
+         console.log(value)
+      })
+      WaitMsgs.forEach(value=> {
+         console.log(value)
+      })
+      ReplyMsgs.forEach(value=> {
+         console.log(value)
+      })
+      ResponseMsgs.forEach(value=> {
+         console.log(value)
+      })
+      IntercomMsgs.forEach(value=> {
+         console.log(value)
+      })
+      RequestMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      WaitMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      ReplyMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      ResponseMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+      IntercomMsgFiles.forEach(value=> {
+         console.log(value)
+      })
+
+      console.log("loaded json data");
+      loaded_json_data = true;
+    }).catch(err => console.log(err.message))
     
 
 //  output.write(true);
     parser.on("data", (line) => {console.log(line)
     heart_beat_tick++;
-    if(heart_beat_tick %100 == 0 && !loaded_json_data){
-      console.log('Try to fetch data')
-      fetchData()
+    if(heart_beat_tick %4 == 0){
+//      console.log('Sending heart beat')
+//      io.emit('heart_beat');
     } 
-    
  
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
         console.log("Either line not a number or is outside of range")
@@ -175,7 +225,7 @@ init(() => {
         }
       });
       socket.on('webClientAudioData', (data) => {
-//        fileReader.readAsArrayBuffer(data)
+        let blob = new Blob(data, {'type': 'audio/webm;'})
         console.log("We have received audio data");
       }) 
 
@@ -327,64 +377,6 @@ async function getFTDIPath() {
         return null;
     }
 }
-
-function fetchData() {
-    console.log('calling fetchData')
-    fetch('http://cambdoorbell.duckdns.org:3000/settings').then(res => res.json()).then(data => {
-      data.forEach(value =>{
-         names.push(value["name"])
-         RequestMsgs.push(value["RequestMsg"])
-         WaitMsgs.push(value["WaitMsg"])
-         ReplyMsgs.push(value["ReplyMsg"])
-         ResponseMsgs.push(value["ResponseMsg"])
-         IntercomMsgs.push(value["IntercomMsg"])
-         NoAnswerFiles.push(value["NoAnswerFile"])
-         RequestMsgFiles.push(value["RequestMsgFile"])
-         WaitMsgFiles.push(value["WaitMsgFile"])
-         ReplyMsgFiles.push(value["ReplyMsgFile"])
-         ResponseMsgFiles.push(value["ResponseMsgFile"])
-         IntercomMsgFiles.push(value["IntercomMsgFile"])
-      })
-      names.forEach(value=> {
-         console.log(value)
-      })
-      RequestMsgs.forEach(value=> {
-         console.log(value)
-      })
-      WaitMsgs.forEach(value=> {
-         console.log(value)
-      })
-      ReplyMsgs.forEach(value=> {
-         console.log(value)
-      })
-      ResponseMsgs.forEach(value=> {
-         console.log(value)
-      })
-      IntercomMsgs.forEach(value=> {
-         console.log(value)
-      })
-      RequestMsgFiles.forEach(value=> {
-         console.log(value)
-      })
-      WaitMsgFiles.forEach(value=> {
-         console.log(value)
-      })
-      ReplyMsgFiles.forEach(value=> {
-         console.log(value)
-      })
-      ResponseMsgFiles.forEach(value=> {
-         console.log(value)
-      })
-      IntercomMsgFiles.forEach(value=> {
-         console.log(value)
-      })
-
-      console.log("loaded json data");
-      loaded_json_data = true;
-    }).catch(err => console.log(err.message))
-    console.log('loaded_json_data = '+loaded_json_data);
-}
-
 function getRandomNumber() {
     // Generate a random integer between 1 and 9 (inclusive)
     const min = 100000;
@@ -419,7 +411,6 @@ function buttonPress(button_number, output){
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId )
             }
         }
-        console.log("Ring bell")
         output.write(1);
 } 
 
@@ -445,7 +436,7 @@ function playMP3(mp3_file_name){
              console.log("play file " +  mp3_file_name);
              child.exec("play " + mp3_file_name + " tempo 1.2");
            } else {
-             console.log("Can't find file " + mp3_file_name);
+             console.log("Can't find file" + mp3_file_name);
            }
 }
 
