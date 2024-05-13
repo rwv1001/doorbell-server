@@ -194,6 +194,7 @@ init(() => {
         }
         offererSocketId=socket.id;
         offerer = true;
+        socket.emit('sendOfferAcknowledgment')
         console.log("newoffer Handler: offererSocketId = " + offererSocketId)
         // console.log(newOffer.sdp.slice(50))
         //send out to all connected sockets EXCEPT the caller
