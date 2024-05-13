@@ -21,7 +21,10 @@ const httpServer = createServer();
 
 const io = new Server(httpServer, {
     cors: {
-        origin: ["https://cambdoorbell.duckdns.org","http://cambdoorbell.duckdns.org:8080","http://192.168.1.47:8080", "https://192.168.1.47:8080"]
+        origin: ["https://cambdoorbell.duckdns.org","https://test.cambdoorbell.duckdns.org","https://socket.cambdoorbell.duckdns.org","http://cambdoorbell.duckdns.org:8080","http://192.168.1.47:8080","https://192.168.1.47:8080"],
+        methods: ["GET", "POST"], // Add any other HTTP methods you want to allow
+        allowedHeaders: ["Content-Type"], // Add any other headers you want to allow
+        credentials: true // If you need to send cookies or use authentication
 //          origin: "*"
     }
 })
@@ -61,7 +64,7 @@ const WaitMsgFiles = [];
 const ReplyMsgFiles = [];
 const ResponseMsgFiles = [];
 const IntercomMsgFiles = [];
-var loaded_json_data = false
+var loaded_json_data = false;
 
 //const audioContext = new AudioContext();
 //const fileReader = new FileReader();
@@ -99,7 +102,7 @@ init(() => {
     
  
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
-        console.log("Either line not a number or is outside of range")
+        //console.log("Either line not a number or is outside of range")
         if(idle == false) {
            let now = new Date();
            let remaining = moment.duration(Date.parse(until) - now)
@@ -135,7 +138,7 @@ init(() => {
         }
         new_press = true;
 
-        console.log("We got something else")
+        // console.log("We got something else")
         output.write(0);
 
     }
@@ -144,9 +147,148 @@ init(() => {
     }
 
     });
-
-
+    let offer = null
+    let offererSocketId = 0;
+    let offererUserName = 0;
+    // = [
+      // offererUserName
+      // offer
+      // offerIceCandidates
+      // answererUserName
+      // answer
+      // answererIceCandidates
+    //];
+    const connectedSockets = [
+       //username, socketId
+    ];
     io.on('connection', socket => {
+      let offerer = false;
+      const userName = socket.handshake.auth.userName;
+      const password = socket.handshake.auth.password;
+      console.log("New connection username is: "+ userName)
+      connectedSockets.push({
+        socketId: socket.id,
+        userName
+      })
+      console.log("number of elements in connectedSockets = " + connectedSockets.length)
+      if(offer){
+        console.log("Sending out sendOff");
+        if(offer.offereUserName === userName){
+          offererSocketId = socket.id;
+          offerer = true;
+        }
+        socket.emit('sendOffer',offer);
+      } else {
+        console.log("No offer to send");
+      }
+      
+      socket.on('newOffer',newOffer=>{
+        console.log("***************** Handling new offer ****************************")
+        offer={
+            offererUserName: userName,
+            offer: newOffer,
+            offerIceCandidates: [],
+            answererUserName: null,
+            answer: null,
+            answererIceCandidates: []
+        }
+        offererSocketId=socket.id;
+        offerer = true;
+        console.log("newoffer Handler: offererSocketId = " + offererSocketId)
+        // console.log(newOffer.sdp.slice(50))
+        //send out to all connected sockets EXCEPT the caller
+        console.log("Broadcasting sendOffer")
+        socket.broadcast.emit('sendOffer',offer)
+      })
+      socket.on('newAnswer',(offerObj,ackFunction)=>{
+        console.log("Handling newAnswer")
+        console.log(offerObj);
+        //emit this answer (offerObj) back to CLIENT1
+        //in order to do that, we need CLIENT1's socketid
+        const socketToAnswer = connectedSockets.find(s=>s.userName === offerObj.offererUserName)
+        if(!socketToAnswer){
+            console.log("No matching socket")
+            return;
+        }
+        //we found the matching socket, so we can emit to it!
+        const socketIdToAnswer = socketToAnswer.socketId;
+        console.log("newAnswer Handler: socketIdToAnswer = " + socketIdToAnswer +",  offererSocketId = " +  offererSocketId)
+        //we find the offer to update so we can emit it
+        if(!offer){
+            console.log("No OfferToUpdate")
+            return;
+        }
+        //send back to the answerer all the iceCandidates we have already collected
+        ackFunction(offer.offerIceCandidates);
+        offer.answer = offerObj.answer
+        console.log("Setting offer.answererUserName to " + userName)
+        offer.answererUserName = userName
+        //socket has a .to() which allows emiting to a "room"
+        //every socket has it's own room
+        console.log("emitting answerResponse")
+        socket.to(socketIdToAnswer).emit('answerResponse',offer)
+        console.log("newAnswer offer after update:")
+        console.log(offer);
+      })
+      socket.on('sendIceCandidateToSignalingServer',iceCandidateObj=>{
+        console.log("Handling sendIceCandidateToSignalingServer")
+        const { didIOffer, iceUserName, iceCandidate } = iceCandidateObj;
+        console.log("didIOffer = " + didIOffer + ", iceUserName = " + iceUserName )
+        // console.log(iceCandidate);
+        if(didIOffer){
+            //this ice is coming from the offerer. Send to the answerer
+            if(offer && offer.offererUserName === iceUserName){
+                offer.offerIceCandidates.push(iceCandidate)
+                // 1. When the answerer answers, all existing ice candidates are sent
+                // 2. Any candidates that come in after the offer has been answered, will be passed through
+                if(offer.answererUserName){
+                    //pass it through to the other socket
+                    const socketToSendTo = connectedSockets.find(s=>s.userName === offer.answererUserName);
+                    console.log("didIOffer = true, username = " + offer.answererUserName + ", socketToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
+                    if(socketToSendTo){
+                        console.log("Send receivedIceCandidateFromServer message")
+                        socket.to(socketToSendTo.socketId).emit('receivedIceCandidateFromServer',iceCandidate)
+                    }else{
+                        console.log("Ice candidate recieved but could not find answere")
+                    }
+                }
+            }
+        }else{
+            //this ice is coming from the answerer. Send to the offerer
+            //pass it through to the other socket
+            if(offer){
+               const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
+               console.log("didIOffer = false, username = " + offer.offererUserName + ", socketIdToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
+               if(socketToSendTo){
+                   console.log("Send receivedIceCandidateFromServer message from answerer")
+                   socket.to(socketToSendTo.socketId).emit('receivedIceCandidateFromServer',iceCandidate)
+               }else{
+                   console.log("Ice candidate recieved but could not find offerer")
+               }
+            }
+            else {
+               console.log("There is no offerer!")
+            }
+        }
+        // console.log(offers)
+      })
+      socket.on('hangupReset', function() {
+         console.log('Handling hangupReset')
+         if(offer){
+           const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
+           console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
+           socket.to(socketToSendTo.socketId).emit('resetOffer')
+           socket.emit('hangupResponse')
+         } 
+      })
+
+      socket.on('disconnect', function() {
+         console.log('Got disconnect!');
+         offererSocketId = 0;
+         let index = connectedSockets.findIndex(socketObj => socketObj.socketId === socket.id);
+         connectedSockets.splice(index, 1);
+         console.log("Disconnect: number of elements in connectedSockets = " + connectedSockets.length)
+      });
       console.log(`User ${socket.id} connected`)
       socket.on('answered', (id)=> {
         console.log('Answered received with id '+ id);
