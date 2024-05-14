@@ -99,6 +99,12 @@ init(() => {
       console.log('Try to fetch data')
       fetchData()
     } 
+
+    if(heart_beat_tick %100 == 0 && !offer){
+      console.log('We have no offer, so reset offer')
+      io.emit('resetOffer')
+      
+    }
     
  
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
@@ -282,6 +288,14 @@ init(() => {
            socket.emit('hangupResponse')
          } 
       })
+      //socket.on('requestOffer', function() {
+      //   console.log('Handle requestOffer')
+      //   if(offer){
+      //     socket.emit('sendOffer',offer);           
+      //   } else {
+
+      //   }
+      //})
 
       socket.on('disconnect', function() {
          console.log('Got disconnect!');
