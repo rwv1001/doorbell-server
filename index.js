@@ -120,7 +120,7 @@ init(() => {
               }
            } else {
                 if(!request_answered) {
-                   let mp3_file_name = assets_path+NoAnswerFiles[current_button-1];
+                   let mp3_file_name = NoAnswerFiles[current_button-1];
                    playMP3(mp3_file_name)
                 }
                 request_answered = false;
@@ -312,7 +312,7 @@ init(() => {
           console.log("answered: json data available")
           addMessage(ResponseMsgs[id-1], ResponseMsgFiles[id-1], id)
           
-          let mp3_file_name = assets_path+ReplyMsgFiles[id-1];
+          let mp3_file_name = ReplyMsgFiles[id-1];
           playMP3(mp3_file_name)          
         }
       });
@@ -555,7 +555,7 @@ function buttonPress(button_number, output){
         if(new_press) {
            new_press = false;
            current_button = button_number;
-           let mp3_file_name = assets_path+WaitMsgFiles[button_number-1];
+           let mp3_file_name = WaitMsgFiles[button_number-1];
            playMP3(mp3_file_name)
         }
         let now = new Date();
@@ -598,12 +598,13 @@ function addMessage(text_msg, mp3message_to_browser, user_generator){
 }
 
 function playMP3(mp3_file_name){
-           if(fs.existsSync(mp3_file_name)) {
+//           if(fs.existsSync(mp3_file_name)) {
              console.log("play file " +  mp3_file_name);
-             child.exec("play " + mp3_file_name + " tempo 1.2");
-           } else {
-             console.log("Can't find file " + mp3_file_name);
-           }
+             io.emit('playfile', mp3_file_name)
+//             child.exec("play " + mp3_file_name + " tempo 1.2");
+ //          } else {
+ //            console.log("Can't find file " + mp3_file_name);
+ //          }
 }
 
 
