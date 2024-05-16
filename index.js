@@ -30,13 +30,13 @@ const io = new Server(httpServer, {
 })
 
 
-const assets_path = '/home/pi/vue3-doorbell-receiver/src/assets/';
+const assets_path = '/app/assets/';
 const TIME_OUT_DURATION = 1/2*60;
 const INTERCOM_TIME_OUT_DURATION = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const CALL_FETCH_TIMEOUT = 3000;
-const ASSETS_DIR = "/home/pi/vue3-doorbell-receiver/src/assets/"
+const ASSETS_DIR = "/app/assets/"
 var message_tick = 0; 
 var idle = true;
 var request_answered = false;
@@ -613,7 +613,8 @@ function generateMP3(arg1, arg2){
    console.log("arg2: "+ arg2);
  
    let options={
-         scriptPath: "/home/pi/server",
+         pythonPath: '/root/.local/pipx/venvs/gtts/bin/python3',
+         scriptPath: "/app",
          args:[arg1, ASSETS_DIR+arg2]
        }
        PythonShell.run("TextToAudio.py", options, (err,res)=>{
