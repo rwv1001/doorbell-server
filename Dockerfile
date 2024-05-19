@@ -15,7 +15,9 @@ COPY package.json /app/package.json
 
 RUN npm install
 
-COPY . .
+COPY index.js /app/index.js
+
+COPY TextToAudio.py /app/TextToAudio.py
 
 RUN apt-get install -y python3-full python3-pip
 
@@ -28,5 +30,6 @@ RUN . /root/.local/pipx/venvs/gtts/bin/activate
 
 # Expose port 3500 (you can choose a different port if needed)
 EXPOSE 3500
+ENV NODE_ENV=production
 
 CMD ["node", "index.js"]

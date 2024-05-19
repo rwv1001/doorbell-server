@@ -12,9 +12,11 @@ import fs from "fs";
 import * as child from 'child_process';
 import {useDateFormat, useNow} from "@vueuse/core";
 import util from "util";
+if (process.env.NODE_ENV === 'production') {
+  console.log = function () {}; // Disable console.log
+}
 
-
-
+//console.log = function () {};
 
 const exec = util.promisify(child.exec);
 const httpServer = createServer();
@@ -53,12 +55,13 @@ var userGenerator = 0;
 const MAX_MESSAGES = 5;
 var heart_beat_tick = 0;
 const names = [];
+const NoAnswerMsgs = [];
 const RequestMsgs = [];
 const WaitMsgs = [];
 const ReplyMsgs = [];
 const ResponseMsgs = [];
 const IntercomMsgs = [];
-const NoAnswerFiles = [];
+const NoAnswerMsgFiles = [];
 const RequestMsgFiles = [];
 const WaitMsgFiles = [];
 const ReplyMsgFiles = [];
@@ -120,7 +123,7 @@ init(() => {
               }
            } else {
                 if(!request_answered) {
-                   let mp3_file_name = NoAnswerFiles[current_button-1];
+                   let mp3_file_name = NoAnswerMsgFiles[current_button-1];
                    playMP3(mp3_file_name)
                 }
                 request_answered = false;
@@ -345,17 +348,18 @@ init(() => {
         const oldData = JSON.parse(oldJSONData);
         console.log("new data is: " + newData);
         console.log("old data is: " + oldData); 
-        if(newData.name!= oldData.name) {
+        if(newData.NoAnswerMsg!= oldData.NoAnswerMsg) {
           console.log("name has changed to "+ newData.name);
-          var arg1 = newData.name + " did not answer. Please try someone else.";
+          var arg1 = newData.NoAnswerMsg
+          NoAnswerMsgs[id-1]= arg1;
           var arg2 = id+"-noAnswer-"+getRandomNumber()+".mp3"
-          newData.noAnswerFile = arg2;
-          NoAnswerFiles[id-1] = arg2;
+          newData.NoAnswerMsgFile = arg2;
+          NoAnswerMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-noAnswer-*");
           child.exec("rm -f " +assets_path+ id+"-noAnswer-*");
           generateMP3(arg1, arg2);
         } else {
-          newData.noAnswerFile=NoAnswerFiles[id-1];
+          newData.NoAnswerMsgFile=NoAnswerMsgFiles[id-1];
         } 
         if(newData.RequestMsg!= oldData.RequestMsg) {
           console.log("RequestMsg has changed to "+ newData.RequestMsg);
@@ -426,12 +430,13 @@ init(() => {
         console.log("Axios update")
          const result = axios.put("http://cambdoorbell.duckdns.org:3000/settings/"+id,{
            name:newData.name,
+           NoAnswerMsg:newData.NoAnswerMsg,
            RequestMsg:newData.RequestMsg,
            WaitMsg:newData.WaitMsg,
            ReplyMsg:newData.ReplyMsg,
            ResponseMsg:newData.ResponseMsg,
            IntercomMsg:newData.IntercomMsg,
-           NoAnswerFile:newData.noAnswerFile,
+           NoAnswerMsgFile:newData.NoAnswerMsgFile,
            RequestMsgFile:newData.RequestMsgFile,
            WaitMsgFile:newData.WaitMsgFile,
            ReplyMsgFile:newData.ReplyMsgFile,
@@ -490,12 +495,13 @@ function fetchData() {
     fetch('http://cambdoorbell.duckdns.org:3000/settings').then(res => res.json()).then(data => {
       data.forEach(value =>{
          names.push(value["name"])
+         NoAnswerMsgs.push(value["NoAnswerMsg"])
          RequestMsgs.push(value["RequestMsg"])
          WaitMsgs.push(value["WaitMsg"])
          ReplyMsgs.push(value["ReplyMsg"])
          ResponseMsgs.push(value["ResponseMsg"])
          IntercomMsgs.push(value["IntercomMsg"])
-         NoAnswerFiles.push(value["NoAnswerFile"])
+         NoAnswerMsgFiles.push(value["NoAnswerMsgFile"])
          RequestMsgFiles.push(value["RequestMsgFile"])
          WaitMsgFiles.push(value["WaitMsgFile"])
          ReplyMsgFiles.push(value["ReplyMsgFile"])
@@ -505,6 +511,10 @@ function fetchData() {
       names.forEach(value=> {
          console.log(value)
       })
+      NoAnswerMsgs.forEach(value=> {
+         console.log(value)
+      })
+
       RequestMsgs.forEach(value=> {
          console.log(value)
       })
@@ -586,9 +596,11 @@ function addMessage(text_msg, mp3message_to_browser, user_generator){
            current_message_uuid = uuid.v4();
            userGenerator = user_generator
            mp3MessageToBrowser = mp3message_to_browser
-           const current_time = useDateFormat(useNow(), "HH:mm:ss").value;
+           //const current_time = useDateFormat( moment().add(1, 'hours'), "HH:mm:ss").value;
+           const current_time = useDateFormat( Date(), "HH:mm:ss").value;
            let new_msg = "("+current_time+") " + text_msg;
            console.log("New Message is: "+new_msg);
+           console.log("useNow returns: "+ useNow().value);
            console.log("mp3 to browser is: "+ mp3message_to_browser+", and usergenerator is " + userGenerator);
            message_list.push(new_msg)
            if(message_list.length >  MAX_MESSAGES) {
@@ -607,25 +619,32 @@ function playMP3(mp3_file_name){
  //          }
 }
 
+function isNotAlphanumeric(str) {
+  return !/[A-Za-z0-9]/.test(str);
+}
 
 function generateMP3(arg1, arg2){
    console.log("arg1: "+ arg1);
    console.log("arg2: "+ arg2);
- 
-   let options={
-         pythonPath: '/root/.local/pipx/venvs/gtts/bin/python3',
-         scriptPath: "/app",
-         args:[arg1, ASSETS_DIR+arg2]
-       }
-       PythonShell.run("TextToAudio.py", options, (err,res)=>{
-         if(err){
-            console.log(err)
+   if(isNotAlphanumeric(arg1)){
+     child.exec("cp " + "silent.mp3 " + ASSETS_DIR+arg2);
+   } else {
+
+     let options={
+           pythonPath: '/root/.local/pipx/venvs/gtts/bin/python3',
+           scriptPath: "/app",
+           args:[arg1, ASSETS_DIR+arg2]
          }
-         if(res){
-            console.log("We are here")
-            console.log(res)
-         }
-       })
+         PythonShell.run("TextToAudio.py", options, (err,res)=>{
+           if(err){
+              console.log(err)
+           }
+           if(res){
+              console.log("We are here")
+              console.log(res)
+           }
+         })
+   }
    console.log("generateMP3 complete")
 }
 
