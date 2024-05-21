@@ -346,6 +346,7 @@ init(() => {
         console.log('oldJSON: ' + oldJSONData)
         const newData = JSON.parse(newJSONData);
         const oldData = JSON.parse(oldJSONData);
+        const newFiles = [];
         console.log("new data is: " + newData);
         console.log("old data is: " + oldData); 
         if(newData.NoAnswerMsg!= oldData.NoAnswerMsg) {
@@ -353,6 +354,7 @@ init(() => {
           var arg1 = newData.NoAnswerMsg
           NoAnswerMsgs[id-1]= arg1;
           var arg2 = id+"-noAnswer-"+getRandomNumber()+".mp3"
+          newFiles.push(arg2);
           newData.NoAnswerMsgFile = arg2;
           NoAnswerMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-noAnswer-*");
@@ -366,6 +368,7 @@ init(() => {
           var arg1 = newData.RequestMsg;
           RequestMsgs[id-1] = arg1;
           var arg2 = id+"-RequestMsg-"+getRandomNumber()+".mp3";
+          newFiles.push(arg2);
           newData.RequestMsgFile = arg2;
           RequestMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-RequestMsg-*");
@@ -380,6 +383,7 @@ init(() => {
           var arg1 = newData.WaitMsg;
           WaitMsgs[id-1] = arg1;
           var arg2 = id+"-WaitMsg-"+getRandomNumber()+".mp3";
+          newFiles.push(arg2);
           newData.WaitMsgFile = arg2;
           WaitMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-WaitMsg-*");
@@ -393,6 +397,7 @@ init(() => {
           var arg1 = newData.ReplyMsg;
           ReplyMsgs[id -1] = arg1;
           var arg2 = id+"-ReplyMsg-"+getRandomNumber()+".mp3";
+          newFiles.push(arg2);
           newData.ReplyMsgFile = arg2;
           ReplyMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-ReplyMsg-*");
@@ -406,6 +411,7 @@ init(() => {
           var arg1 = newData.ResponseMsg;
           ResponseMsgs[id-1] = arg1;
           var arg2 = id+"-ResponseMsg-"+getRandomNumber()+".mp3";
+          newFiles.push(arg2);
           newData.ResponseMsgFile = arg2;
           ResponseMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-ResponseMsg-*");
@@ -419,6 +425,7 @@ init(() => {
           var arg1 = newData.IntercomMsg;
           IntercomMsgs[id-1] = arg1;
           var arg2 = id+"-IntercomMsg-"+getRandomNumber()+".mp3";
+          newFiles.push(arg2);
           newData.IntercomMsgFile = arg2;
           IntercomMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-IntercomMsg-*");
@@ -445,6 +452,7 @@ init(() => {
            Phone:newData.Phone,
            PhoneNumber:newData.PhoneNumber,
           }).catch(error => console.error(error));
+          io.emit("registerMP3Files", newFiles)
       });
       
     });
