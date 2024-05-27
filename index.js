@@ -33,11 +33,10 @@ const io = new Server(httpServer, {
 
 
 const assets_path = '/app/assets/';
-const TIME_OUT_DURATION = 1/2*60;
-const INTERCOM_TIME_OUT_DURATION = 60;
+let time_out_duration = 1/2*60;
+let intercom_time_out_duration = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
-const CALL_FETCH_TIMEOUT = 3000;
 const ASSETS_DIR = "/app/assets/"
 var message_tick = 0; 
 var idle = true;
@@ -47,7 +46,8 @@ var waiting_for_gui_response = 0;
 var message_list = [];
 var intercomClientId = 0;
 var current_message_uuid = 0;
-var until = new Date(); 
+let until = new Date();
+let intercom_until = new Date();
 var new_press = true;
 var new_message_timeout= moment();
 var mp3MessageToBrowser ='';
@@ -114,6 +114,8 @@ init(() => {
         //console.log("Either line not a number or is outside of range")
         if(idle == false) {
            let now = new Date();
+           let intercom_remaining = moment.duration(Date.parse(intercom_until) - now)
+
            let remaining = moment.duration(Date.parse(until) - now)
            console.log("The remaining time for emitting message list is "+ remaining)
            if(remaining > 0  ){
@@ -137,6 +139,10 @@ init(() => {
                 intercomClientId = 0;
                 userGenerator = 0;
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
+           }
+           if(intercom_remaining < 0) {
+                intercomClientId = 0;
+                io.emit('intercomTimeout');
            }
         } else {
           if(heart_beat_tick %4 == 0){
@@ -190,7 +196,8 @@ init(() => {
       } else {
         console.log("No offer to send");
       }
-      
+      socket.on('consoleLog', msg =>
+      console.warn("Console Log: " +msg))
       socket.on('newOffer',newOffer=>{
         console.log("***************** Handling new offer ****************************")
         offer={
@@ -210,6 +217,7 @@ init(() => {
         console.log("Broadcasting sendOffer")
         socket.broadcast.emit('sendOffer',offer)
       })
+      
       socket.on('newAnswer',(offerObj,ackFunction)=>{
         console.log("Handling newAnswer")
         console.log(offerObj);
@@ -326,7 +334,11 @@ init(() => {
         intercomClientId = newIntercomClientId;
         if(newIntercomClientId != 0) {
           socket.join(newIntercomClientId);
-          until = moment().add(INTERCOM_TIME_OUT_DURATION, 'seconds');
+          intercom_until = moment().add(intercom_time_out_duration, 'seconds');
+          if(until.isBefore(intercom_until)){
+            until = intercom_until 
+
+          }
           console.log("updateIntercomClientId: calling fetch set to true")
           if(loaded_json_data) {
             console.log("answered: json data available")
@@ -338,8 +350,46 @@ init(() => {
 //        fileReader.readAsArrayBuffer(data)
         console.log("We have received audio data");
       }) 
+      socket.on('updateTimeouts', (answerTimeout, intercomTimeout) => {
+        console.log("updateTimeouts Axios update")
+        console.log("old values: time_out_duration  = " + time_out_duration + ", intercomTimeout = " + intercom_time_out_duration)
+        console.log("new values: answerTimeout  = " + answerTimeout + ", intercomTimeout = " + intercomTimeout)
+ 
+        let errorResponse = '';
+         if(isNaN(answerTimeout)) {
+           errorResponse+='The value answerTimeout = ' + answerTimeout + ' is not an integer.\n'
+         } else {
+           time_out_duration = Number(answerTimeout)
+         }
+           
+         if(isNaN(intercomTimeout)) {
+           errorResponse+='The value intercomTimeout = ' + intercomTimeout + ' is not an integer.\n'
+         } else {
+           intercom_time_out_duration = Number(intercomTimeout)
+         }
+         if(errorResponse.length==0) {
+           const result = axios.put("http://cambdoorbell.duckdns.org:3000/timeouts",{
+             answerTimeout:answerTimeout,
+             intercomTimeout:intercomTimeout,
+            }).catch(error => {
+               console.error(error)
+               error+='Axios Error:\n'
+               errorResponse+=error;
+               errorResponse+='\n'
+            });
+         }
+         if(errorResponse.length>0) {
+            console.log("updateError: "+errorResponse )
+            socket.emit("updateError", errorResponse)
+         } else {
+            console.log("updateResponse")
+            socket.emit("updateResponse")
+         }
+        
+      })
 
       socket.on('updateSettings', (id, newJSONData, oldJSONData) => {
+        let errorResponse = ''
         console.log('update settings please!')
         console.log('id: '+ id)
         console.log('newJSON: ' + newJSONData)
@@ -359,7 +409,7 @@ init(() => {
           NoAnswerMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-noAnswer-*");
           child.exec("rm -f " +assets_path+ id+"-noAnswer-*");
-          generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           newData.NoAnswerMsgFile=NoAnswerMsgFiles[id-1];
         } 
@@ -373,7 +423,7 @@ init(() => {
           RequestMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-RequestMsg-*");
           child.exec("rm -f " +assets_path+ id+"-RequestMsg-*");
-           generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           console.log("I am here!")
           newData.RequestMsgFile=RequestMsgFiles[id-1];
@@ -388,7 +438,7 @@ init(() => {
           WaitMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-WaitMsg-*");
           child.exec("rm -f " +assets_path+ id+"-WaitMsg-*");
-          generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           newData.WaitMsgFile=WaitMsgFiles[id-1];
         }
@@ -402,7 +452,7 @@ init(() => {
           ReplyMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-ReplyMsg-*");
           child.exec("rm -f " +assets_path+ id+"-ReplyMsg-*");
-          generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           newData.ReplyMsgFile=ReplyMsgFiles[id-1];
         }
@@ -416,7 +466,7 @@ init(() => {
           ResponseMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-ResponseMsg-*");
           child.exec("rm -f " +assets_path+ id+"-ResponseMsg-*");
-          generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           newData.ResponseMsgFile=ResponseMsgFiles[id-1];
         }
@@ -430,7 +480,7 @@ init(() => {
           IntercomMsgFiles[id-1] = arg2;
           console.log("calling: rm -f "+ assets_path+id+"-IntercomMsg-*");
           child.exec("rm -f " +assets_path+ id+"-IntercomMsg-*");
-          generateMP3(arg1, arg2);
+          errorResponse+=generateMP3(arg1, arg2);
         } else {
           newData.IntercomMsgFile=IntercomMsgFiles[id-1];
         }     
@@ -451,8 +501,20 @@ init(() => {
            IntercomMsgFile:newData.IntercomMsgFile,
            Phone:newData.Phone,
            PhoneNumber:newData.PhoneNumber,
-          }).catch(error => console.error(error));
+          }).catch(error => {
+             console.error(error)
+             error+='Axios Error:\n'
+             errorResponse+=error;
+             errorResponse+='\n'
+          });
           io.emit("registerMP3Files", newFiles)
+          if(errorResponse.length>0) {
+             console.log("updateError: "+errorResponse )
+             socket.emit("updateError", errorResponse)
+          } else {
+             console.log("updateResponse")
+             socket.emit("updateResponse")
+          }
       });
       
     });
@@ -500,7 +562,7 @@ async function getFTDIPath() {
 
 function fetchData() {
     console.log('calling fetchData')
-    fetch('http://cambdoorbell.duckdns.org:3000/settings').then(res => res.json()).then(data => {
+    fetch('https://json.cambdoorbell.duckdns.org/settings').then(res => res.json()).then(data => {
       data.forEach(value =>{
          names.push(value["name"])
          NoAnswerMsgs.push(value["NoAnswerMsg"])
@@ -558,6 +620,21 @@ function fetchData() {
       loaded_json_data = true;
     }).catch(err => console.log(err.message))
     console.log('loaded_json_data = '+loaded_json_data);
+    console.log('before loaded json timeout data, time_out_duration = '+ time_out_duration + ', intercom_time_out_duration = ' + intercom_time_out_duration); 
+    fetch('https://json.cambdoorbell.duckdns.org/timeouts').then(res => res.json()).then(data => {
+     if(!isNaN(data.answerTimeout) && !isNaN(data.intercomTimeout)) { 
+      time_out_duration = Number(data.answerTimeout);
+      intercom_time_out_duration = Number(data.intercomTimeout);
+      
+      console.log('loaded json timeout data, time_out_duration = '+ time_out_duration + ', intercom_time_out_duration = ' + intercom_time_out_duration);
+      } else {
+        console.log('timeouts are not integers')
+      }
+    }).catch(err => console.log(err.message))
+console.log('loaded? json timeout data, time_out_duration = '+ time_out_duration + ', intercom_time_out_duration = ' + intercom_time_out_duration);
+
+
+
 }
 
 function getRandomNumber() {
@@ -582,7 +659,7 @@ function buttonPress(button_number, output){
         if(waiting_for_gui_response != parseInt(button_number) || new_message_remain < 0 ){
            new_message_timeout = moment().add(MESSAGE_TIME_OUT_DURATION, 'seconds');
            message_tick=0;
-           until = moment().add(TIME_OUT_DURATION, 'seconds');
+           until = moment().add(time_out_duration, 'seconds');
            waiting_for_gui_response = parseInt(button_number);
            console.log("waiting for gui response: "+waiting_for_gui_response)
            if(loaded_json_data) {
@@ -634,26 +711,31 @@ function isNotAlphanumeric(str) {
 function generateMP3(arg1, arg2){
    console.log("arg1: "+ arg1);
    console.log("arg2: "+ arg2);
+   let response = ''
    if(isNotAlphanumeric(arg1)){
      child.exec("cp " + "silent.mp3 " + ASSETS_DIR+arg2);
    } else {
-
-     let options={
-           pythonPath: '/root/.local/pipx/venvs/gtts/bin/python3',
-           scriptPath: "/app",
-           args:[arg1, ASSETS_DIR+arg2]
-         }
-         PythonShell.run("TextToAudio.py", options, (err,res)=>{
-           if(err){
-              console.log(err)
+    try { 
+       let options={
+             pythonPath: '/root/.local/pipx/venvs/gtts/bin/python3',
+             scriptPath: "/app",
+             args:[arg1, ASSETS_DIR+arg2]
            }
-           if(res){
-              console.log("We are here")
-              console.log(res)
-           }
-         })
+           PythonShell.run("TextToAudio.py", options, (err,res)=>{
+             if(err){ 
+                  console.log(err)
+             }
+             if(res){
+                console.log("We are here")
+                console.log(res)
+             }
+           })
+     } catch(error) {
+       response = "generateMP3 error: " +error + "\n"
+     }
    }
    console.log("generateMP3 complete")
+   return response
 }
 
 
