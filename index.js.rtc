@@ -1,4 +1,3 @@
-
 import { createServer } from "http";
 import { Server } from "socket.io"
 import { SerialPort } from 'serialport';
@@ -32,13 +31,15 @@ const io = new Server(httpServer, {
     }
 })
 
-
+const TICKSPERSEC = 5;
 const assets_path = '/app/assets/';
 let time_out_duration = 1/2*60;
 let intercom_time_out_duration = 60;
 const MESSAGE_TIME_OUT_DURATION = 10;
+const HANGINGUP_TIME_OUT = 6;
 const BUTTON_GENERATOR = 0;
 const ASSETS_DIR = "/app/assets/"
+let hangingup = false;
 var message_tick = 0; 
 var idle = true;
 var request_answered = false;
@@ -49,6 +50,7 @@ var intercomClientId = 0;
 var current_message_uuid = 0;
 let until = new Date();
 let intercom_until = new Date();
+let offererresetted = true;
 var new_press = true;
 var new_message_timeout= moment();
 var mp3MessageToBrowser ='';
@@ -109,6 +111,10 @@ init(() => {
       io.emit('resetOffer')
       
     }
+    if((!offererresetted || intercomClientId != 0)&& hangingup && heart_beat_tick % ( TICKSPERSEC* HANGINGUP_TIME_OUT)==0) {
+      console.log('Still hanging up')
+      io.emit('intercomTimeout');
+    }
     
  
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
@@ -121,7 +127,7 @@ init(() => {
            console.log("The remaining time for emitting message list is "+ remaining)
            if(remaining > 0  ){
               message_tick++;
-              if(message_tick %4 == 0) {
+              if(message_tick % TICKSPERSEC == 0) {
                  io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
               }
            } else {
@@ -137,16 +143,16 @@ init(() => {
                 mp3MessageToBrowser = '';
                 waiting_for_gui_response = 0;
                 current_message_uuid = 0;
-                intercomClientId = 0;
+                if(intercomClientId != 0) {
+                  offererresetted = false;
+                  hangingup = true;
+                  io.emit('intercomTimeout');
+                }
                 userGenerator = 0;
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
            }
-           if(intercom_remaining < 0) {
-                intercomClientId = 0;
-                io.emit('intercomTimeout');
-           }
         } else {
-          if(heart_beat_tick %4 == 0){
+          if(heart_beat_tick % TICKSPERSEC == 0){
             console.log('idle message sent, current_message_uuid = '+ current_message_uuid);
             io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
           }
@@ -200,6 +206,8 @@ init(() => {
       socket.on('consoleLog', msg =>
       console.warn("Console Log: " +msg))
       socket.on('newOffer',newOffer=>{
+        offererresetted = true;
+        hangingup = false
         console.log("***************** Handling new offer ****************************")
         offer={
             offererUserName: userName,
@@ -291,13 +299,26 @@ init(() => {
         }
         // console.log(offers)
       })
-      socket.on('hangupReset', function() {
+      socket.on('hangupReset', function(offerer) {
          console.log('Handling hangupReset')
+         
+         if(!offerer) {
+           intercomClientId = 0;
+         }
+         
          if(offer){
            const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
-           console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
+           if(socketToSendTo){
+           //console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
+           offererresetted = false;
            socket.to(socketToSendTo.socketId).emit('resetOffer')
-           socket.emit('hangupResponse')
+           io.emit('resetOffer')
+           //socket.emit('hangupResponse')
+           } else {
+             console.log('Hangup reset: Could not find socket')
+           } 
+
+
          } 
       })
       //socket.on('requestOffer', function() {
@@ -668,7 +689,7 @@ function buttonPress(button_number, output){
            }
         } else {
             message_tick++;
-            if(message_tick %4 == 0) {
+            if(message_tick % TICKSPERSEC == 0) {
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId )
             }
         }
