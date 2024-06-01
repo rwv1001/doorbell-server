@@ -165,7 +165,7 @@ init(() => {
           }
           if(!offererresetted && (heart_beat_tick - heart_beat_tick_offset) % ( TICKSPERSEC* HANGINGUP_TIME_OUT)==0){
             console.log('idle state: waiting for offererresetted to be true')
-            
+            io.emit('intercomTimeout');
           }
          
 
