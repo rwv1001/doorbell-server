@@ -43,13 +43,15 @@ const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const ASSETS_DIR = "/app/assets/"
 let offererresetted = true;
+let offer;
+let heart_beat_tick_offset = 0;
 var message_tick = 0; 
 var idle = true;
 var request_answered = false;
 var current_button = 0;
 var waiting_for_gui_response = 0;
 var message_list = [];
-var intercomClientId = 0;
+let intercomClientId = 0;
 var current_message_uuid = 0;
 let until = new Date();
 let intercom_until = new Date();
@@ -122,10 +124,13 @@ init(() => {
            let intercom_remaining = moment.duration(Date.parse(intercom_until) - now)
 
            let remaining = moment.duration(Date.parse(until) - now)
-           console.log("The remaining time for emitting message list is "+ remaining)
+           if(message_tick % TICKSPERSEC == 0){
+              console.log("The remaining time for emitting message list is "+ remaining)
+           }
            if(remaining > 0  ){
               message_tick++;
               if(message_tick % TICKSPERSEC == 0) {
+                 console.log("not idle intercomClientId set to: " + intercomClientId )
                  io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
               }
            } else {
@@ -141,19 +146,28 @@ init(() => {
                 mp3MessageToBrowser = '';
                 waiting_for_gui_response = 0;
                 current_message_uuid = 0;
-                intercomClientId = 0;
+                //intercomClientId = 0;
                 userGenerator = 0;
+                console.log("remaingin timeout - intercomClientId set to: " + intercomClientId )
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
            }
            if(intercom_remaining < 0) {
-                intercomClientId = 0;
+                //intercomClientId = 0;
+                offererresetted = false;
                 io.emit('intercomTimeout');
+                console.log('intercomTimeout event being emitted')
+                heart_beat_tick_offset = heart_beat_tick-1;
            }
         } else {
           if(heart_beat_tick % TICKSPERSEC == 0){
             console.log('idle message sent, current_message_uuid = '+ current_message_uuid);
             io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
           }
+          if(!offererresetted && (heart_beat_tick - heart_beat_tick_offset) % ( TICKSPERSEC* HANGINGUP_TIME_OUT)==0){
+            console.log('idle state: waiting for offererresetted to be true')
+            
+          }
+         
 
         }
         new_press = true;
@@ -205,6 +219,7 @@ init(() => {
       console.warn("Console Log: " +msg))
       socket.on('newOffer',newOffer=>{
         intercomClientId = 0;
+        console.log("newOffer - intercomClientId set to: " + intercomClientId )
         console.log("***************** Handling new offer ****************************")
         offer={
             offererUserName: userName,
@@ -214,6 +229,8 @@ init(() => {
             answer: null,
             answererIceCandidates: []
         }
+        intercomClientId = 0;
+        offererresetted = true;
         offererSocketId=socket.id;
         offerer = true;
         socket.emit('sendOfferAcknowledgment')
@@ -678,6 +695,7 @@ function buttonPress(button_number, output){
         } else {
             message_tick++;
             if(message_tick % TICKSPERSEC == 0) {
+                console.log("buttonPress - intercomClientId is: " + intercomClientId )
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId )
             }
         }
@@ -701,6 +719,7 @@ function addMessage(text_msg, mp3message_to_browser, user_generator){
            if(message_list.length >  MAX_MESSAGES) {
               message_list.splice(0,1);
            }
+           console.log("addMessage - intercomClientId set to: " + intercomClientId )
            io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
 }
 
