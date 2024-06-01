@@ -36,9 +36,13 @@ const io = new Server(httpServer, {
 const assets_path = '/app/assets/';
 let time_out_duration = 1/2*60;
 let intercom_time_out_duration = 60;
+const TICKSPERSEC = 5;
+const HANGINGUP_TIME_OUT = 6;
+
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const ASSETS_DIR = "/app/assets/"
+let offererresetted = true;
 var message_tick = 0; 
 var idle = true;
 var request_answered = false;
@@ -121,7 +125,7 @@ init(() => {
            console.log("The remaining time for emitting message list is "+ remaining)
            if(remaining > 0  ){
               message_tick++;
-              if(message_tick %4 == 0) {
+              if(message_tick % TICKSPERSEC == 0) {
                  io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
               }
            } else {
@@ -146,7 +150,7 @@ init(() => {
                 io.emit('intercomTimeout');
            }
         } else {
-          if(heart_beat_tick %4 == 0){
+          if(heart_beat_tick % TICKSPERSEC == 0){
             console.log('idle message sent, current_message_uuid = '+ current_message_uuid);
             io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
           }
@@ -200,6 +204,7 @@ init(() => {
       socket.on('consoleLog', msg =>
       console.warn("Console Log: " +msg))
       socket.on('newOffer',newOffer=>{
+        intercomClientId = 0;
         console.log("***************** Handling new offer ****************************")
         offer={
             offererUserName: userName,
@@ -263,8 +268,8 @@ init(() => {
                 if(offer.answererUserName){
                     //pass it through to the other socket
                     const socketToSendTo = connectedSockets.find(s=>s.userName === offer.answererUserName);
-                    console.log("didIOffer = true, username = " + offer.answererUserName + ", socketToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
-                    if(socketToSendTo){
+                    if(socketToSendTo){    
+                        console.log("didIOffer = true, username = " + offer.answererUserName + ", socketToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
                         console.log("Send receivedIceCandidateFromServer message")
                         socket.to(socketToSendTo.socketId).emit('receivedIceCandidateFromServer',iceCandidate)
                     }else{
@@ -295,9 +300,13 @@ init(() => {
          console.log('Handling hangupReset')
          if(offer){
            const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
+           if(socketToSendTo) {
            console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
            socket.to(socketToSendTo.socketId).emit('resetOffer')
-           socket.emit('hangupResponse')
+           //socket.emit('hangupResponse')
+           } else {
+             console.log("hangupReset: couldn't find socketToSendTo")
+           }
          } 
       })
       //socket.on('requestOffer', function() {
@@ -668,7 +677,7 @@ function buttonPress(button_number, output){
            }
         } else {
             message_tick++;
-            if(message_tick %4 == 0) {
+            if(message_tick % TICKSPERSEC == 0) {
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId )
             }
         }
