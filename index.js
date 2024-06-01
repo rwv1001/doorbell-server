@@ -282,8 +282,8 @@ init(() => {
             //pass it through to the other socket
             if(offer){
                const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
-               console.log("didIOffer = false, username = " + offer.offererUserName + ", socketIdToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
                if(socketToSendTo){
+                   console.log("didIOffer = false, username = " + offer.offererUserName + ", socketIdToSendTo = " + socketToSendTo.socketId +",  offererSocketId = " +  offererSocketId)
                    console.log("Send receivedIceCandidateFromServer message from answerer")
                    socket.to(socketToSendTo.socketId).emit('receivedIceCandidateFromServer',iceCandidate)
                }else{
@@ -301,8 +301,8 @@ init(() => {
          if(offer){
            const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
            if(socketToSendTo) {
-           console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
-           socket.to(socketToSendTo.socketId).emit('resetOffer')
+             console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
+             socket.to(socketToSendTo.socketId).emit('resetOffer')
            //socket.emit('hangupResponse')
            } else {
              console.log("hangupReset: couldn't find socketToSendTo")
