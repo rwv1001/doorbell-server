@@ -38,7 +38,9 @@ let time_out_duration = 1/2*60;
 let intercom_time_out_duration = 60;
 const TICKSPERSEC = 5;
 const HANGINGUP_TIME_OUT = 6;
-
+let speaker_state = 0;
+const SPEAKER_TIMEOUT = 5;
+let speaker_timeout_tick = 0;
 const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const ASSETS_DIR = "/app/assets/"
@@ -109,6 +111,7 @@ FTDIPath = '/dev/ttyS0'
 setTimeout(() => {console.log("1 second timeout")
 init(() => {
     const output = new DigitalOutput('P1-16');
+    const outputSpeakerPower = new DigitalOutput('P1-18');
     const port = new SerialPort({ path: FTDIPath, baudRate: 115200 });
     const parser =  new ReadlineParser({ delimiter: '\n'});
     port.pipe(parser);
@@ -134,7 +137,6 @@ init(() => {
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
         //console.log("Either line not a number or is outside of range")
         if(idle == false) {
-           
            let intercom_remaining = moment.duration(Date.parse(intercom_until) - now)
 
            let remaining = moment.duration(Date.parse(until) - now)
@@ -161,6 +163,7 @@ init(() => {
                 mp3MessageToBrowser = '';
                 waiting_for_gui_response = 0;
                 current_message_uuid = 0;
+                speaker_timeout_tick = heart_beat_tick +  TICKSPERSEC*SPEAKER_TIMEOUT; 
                 //intercomClientId = 0;
                 userGenerator = 0;
                 console.log("Current Time: "+current_time +". Remainging timeout - intercomClientId set to: " + intercomClientId )
@@ -182,6 +185,12 @@ init(() => {
             console.log('Assume if we have not received a hangupReset message, then this is because the client closed the app')
             callReset();
           }
+          if(speaker_state == 1 && speaker_timeout_tick !=0 &&  heart_beat_tick >= speaker_timeout_tick){
+             speaker_state = 0;
+             speaker_timeout_tick = 0;
+             outputSpeakerPower.write(speaker_state);
+             console.log("Turning off speaker");
+          }
          
 
         }
@@ -191,6 +200,12 @@ init(() => {
         
     }
     else {
+        if(speaker_state == 0) {
+          speaker_state = 1;
+          speaker_timeout_tick = 0;
+          outputSpeakerPower.write(speaker_state);
+          console.log("Turning on speaker");
+        }
         buttonPress(parseInt(line).toString(),output)
     }
 
@@ -257,7 +272,7 @@ init(() => {
       
       socket.on('newAnswer',(offerObj,ackFunction)=>{
         console.log("Handling newAnswer")
-        console.log(offerObj);
+        //console.log(offerObj);
         //emit this answer (offerObj) back to CLIENT1
         //in order to do that, we need CLIENT1's socketid
         const socketToAnswer = connectedSockets.find(s=>s.userName === offerObj.offererUserName)
@@ -283,7 +298,7 @@ init(() => {
         console.log("emitting answerResponse")
         socket.to(socketIdToAnswer).emit('answerResponse',offer)
         console.log("newAnswer offer after update:")
-        console.log(offer);
+        //console.log(offer);
       })
       socket.on('sendIceCandidateToSignalingServer',iceCandidateObj=>{
         console.log("Handling sendIceCandidateToSignalingServer")
