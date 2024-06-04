@@ -43,7 +43,6 @@ const MESSAGE_TIME_OUT_DURATION = 10;
 const BUTTON_GENERATOR = 0;
 const ASSETS_DIR = "/app/assets/"
 let offererresetted = true;
-let offer;
 let heart_beat_tick_offset = 0;
 var message_tick = 0; 
 var idle = true;
@@ -75,6 +74,20 @@ const ReplyMsgFiles = [];
 const ResponseMsgFiles = [];
 const IntercomMsgFiles = [];
 var loaded_json_data = false;
+let offer = null
+let offererSocketId = 0;
+let offererUserName = 0;
+    // = [
+      // offererUserName
+      // offer
+      // offerIceCandidates
+      // answererUserName
+      // answer
+      // answererIceCandidates
+    //];
+const connectedSockets = [
+       //username, socketId
+];
 
 //const audioContext = new AudioContext();
 //const fileReader = new FileReader();
@@ -103,7 +116,7 @@ init(() => {
     
 
 //  output.write(true);
-    parser.on("data", (line) => {console.log(line)
+    parser.on("data", (line) => {
     heart_beat_tick++;
     if(heart_beat_tick %100 == 0 && !loaded_json_data){
       console.log('Try to fetch data')
@@ -116,21 +129,23 @@ init(() => {
       
     }
     
- 
+    const now = new Date();
+    const current_time = useDateFormat(now, "HH:mm:ss").value; 
     if(isNaN(line) || parseInt(line)>10 || parseInt(line)<1){
         //console.log("Either line not a number or is outside of range")
         if(idle == false) {
-           let now = new Date();
+           
            let intercom_remaining = moment.duration(Date.parse(intercom_until) - now)
 
            let remaining = moment.duration(Date.parse(until) - now)
            if(message_tick % TICKSPERSEC == 0){
-              console.log("The remaining time for emitting message list is "+ remaining)
+              console.log("Current Time: "+current_time +". The remaining time for emitting message list is "+ remaining)
            }
            if(remaining > 0  ){
               message_tick++;
               if(message_tick % TICKSPERSEC == 0) {
-                 console.log("not idle intercomClientId set to: " + intercomClientId )
+                 
+                 console.log("Current Time: "+current_time +". not idle intercomClientId set to: " + intercomClientId )
                  io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
               }
            } else {
@@ -148,42 +163,41 @@ init(() => {
                 current_message_uuid = 0;
                 //intercomClientId = 0;
                 userGenerator = 0;
-                console.log("remaingin timeout - intercomClientId set to: " + intercomClientId )
+                console.log("Current Time: "+current_time +". Remainging timeout - intercomClientId set to: " + intercomClientId )
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
+                if(intercomClientId !=0) {
+                  emitIntercomTimeout(current_time)
+                }
            }
-           if(intercom_remaining < 0) {
-                //intercomClientId = 0;
-                offererresetted = false;
-                io.emit('intercomTimeout');
-                console.log('intercomTimeout event being emitted')
-                heart_beat_tick_offset = heart_beat_tick-1;
+           if(intercomClientId !=0 && intercom_remaining < 0 && remaining > 0 && heart_beat_tick % ( TICKSPERSEC* HANGINGUP_TIME_OUT)==0) {
+                emitIntercomTimeout(current_time);
            }
         } else {
           if(heart_beat_tick % TICKSPERSEC == 0){
-            console.log('idle message sent, current_message_uuid = '+ current_message_uuid);
+            console.log("Current time: "+current_time +". idle message sent, current_message_uuid = "+ current_message_uuid + ", intercomClientId = " + intercomClientId);
             io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId)
           }
           if(!offererresetted && (heart_beat_tick - heart_beat_tick_offset) % ( TICKSPERSEC* HANGINGUP_TIME_OUT)==0){
-            console.log('idle state: waiting for offererresetted to be true')
-            io.emit('intercomTimeout');
+            console.log("Current Time: "+current_time +". idle state: waiting for offererresetted to be true")
+            console.log('Assume if we have not received a hangupReset message, then this is because the client closed the app')
+            callReset();
           }
          
 
         }
         new_press = true;
 
-        // console.log("We got something else")
         output.write(0);
-
+        
     }
     else {
         buttonPress(parseInt(line).toString(),output)
     }
 
     });
-    let offer = null
-    let offererSocketId = 0;
-    let offererUserName = 0;
+   // let offer = null
+   // let offererSocketId = 0;
+   // let offererUserName = 0;
     // = [
       // offererUserName
       // offer
@@ -192,9 +206,9 @@ init(() => {
       // answer
       // answererIceCandidates
     //];
-    const connectedSockets = [
+   // const connectedSockets = [
        //username, socketId
-    ];
+   // ];
     io.on('connection', socket => {
       let offerer = false;
       const userName = socket.handshake.auth.userName;
@@ -315,16 +329,7 @@ init(() => {
       })
       socket.on('hangupReset', function() {
          console.log('Handling hangupReset')
-         if(offer){
-           const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
-           if(socketToSendTo) {
-             console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
-             socket.to(socketToSendTo.socketId).emit('resetOffer')
-           //socket.emit('hangupResponse')
-           } else {
-             console.log("hangupReset: couldn't find socketToSendTo")
-           }
-         } 
+         callReset();
       })
       //socket.on('requestOffer', function() {
       //   console.log('Handle requestOffer')
@@ -587,6 +592,29 @@ async function getFTDIPath() {
     }
 }
 
+function callReset() {
+    console.log("Begin callReset")
+    if(offer){
+      // const socketToSendTo = connectedSockets.find(s=>s.userName === offer.offererUserName);
+      // if(socketToSendTo) {
+      //   console.log("Emit resetOffer, socketToSendTo = "+ socketToSendTo.socketId + ", offererSocketId ="+offererSocketId )
+         io.emit('resetOffer')
+         //socket.emit('hangupResponse')
+      // } else {
+      //   console.log("callReset: couldn't find socketToSendTo")
+      // }
+    } else {
+      console.log("offer is null!")
+    }
+}
+
+function emitIntercomTimeout(current_time) {
+    //intercomClientId = 0;
+    offererresetted = false;
+    io.emit('intercomTimeout');
+    console.log("Current Time: "+current_time +" intercomTimeout event being emitted")
+    heart_beat_tick_offset = heart_beat_tick-1;
+}
 function fetchData() {
     console.log('calling fetchData')
     fetch('https://json.cambdoorbell.duckdns.org/settings').then(res => res.json()).then(data => {

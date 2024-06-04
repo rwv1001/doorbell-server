@@ -30,6 +30,6 @@ RUN . /root/.local/pipx/venvs/gtts/bin/activate
 
 # Expose port 3500 (you can choose a different port if needed)
 EXPOSE 3500
-ENV NODE_ENV=production
+#ENV NODE_ENV=production
 
 CMD ["node", "index.js"]
