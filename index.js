@@ -760,7 +760,9 @@ function buttonPress(button_number, output){
             }
         }
         console.log("Ring bell")
-        output.write(1);
+        if(button_number < 10) {
+           output.write(1);
+        }
 } 
 
 
