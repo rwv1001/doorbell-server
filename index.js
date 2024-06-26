@@ -4,7 +4,8 @@ import { Server } from "socket.io"
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline'
 import { init } from 'raspi';
-import { DigitalOutput } from 'raspi-gpio';
+import { DigitalOutput, DigitalInput, PULL_UP, PULL_DOWN} from 'raspi-gpio';
+import { Gpio } from 'onoff';
 import {PythonShell} from 'python-shell';
 import axios from 'axios';
 import { uuid } from 'vue-uuid'
@@ -112,6 +113,22 @@ setTimeout(() => {console.log("1 second timeout")
 init(() => {
     const output = new DigitalOutput('P1-16');
     const outputSpeakerPower = new DigitalOutput('P1-18');
+
+
+// Initialize GPIO pin 5 for input   cat /sys/kernel/debug/gpio
+    const shutdown_input = new Gpio(517, 'in', 'both');
+    shutdown_input.watch((err, value) => {
+     if (err) {
+         console.error('Error:', err);
+         return;
+     }
+ 
+     if (value === 0) {
+         console.log('Button pressed!');
+         child.exec('systemctl poweroff');
+         // You can perform any other actions here
+     }
+    });
     const port = new SerialPort({ path: FTDIPath, baudRate: 115200 });
     const parser =  new ReadlineParser({ delimiter: '\n'});
     port.pipe(parser);
