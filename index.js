@@ -738,7 +738,13 @@ function buttonPress(button_number, output){
            new_press = false;
            current_button = button_number;
            let mp3_file_name = WaitMsgFiles[button_number-1];
-           playMP3(mp3_file_name)
+           playMP3("buzzer-1second.mp3");
+           setTimeout(() => {
+             playMP3(mp3_file_name);
+           }, 1500);
+
+
+//           playMP3(mp3_file_name)
         }
         let now = new Date();
         let new_message_remain = moment.duration(Date.parse(new_message_timeout) - now)
@@ -759,7 +765,8 @@ function buttonPress(button_number, output){
                 io.emit('messageListMsg', current_message_uuid, message_list, mp3MessageToBrowser, userGenerator, intercomClientId )
             }
         }
-        console.log("Ring bell")
+        const current_time = useDateFormat( Date(), "HH:mm:ss").value;
+        console.info("(" + current_time + ") Ring bell. Button pressed = " + button_number)
         if(button_number < 10) {
            output.write(1);
         }
