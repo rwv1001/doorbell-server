@@ -25,6 +25,11 @@ RUN apt install -y pipx
 
 RUN pipx install gTTS
 
+
+# RUN apt-get update && apt-get install -y alsa-utils libasound2 sox libsox-fmt-mp3 mpg123
+
+# COPY alsa.conf /usr/share/alsa/alsa.conf
+
 RUN . /root/.local/pipx/venvs/gtts/bin/activate
 
 

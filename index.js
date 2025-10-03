@@ -10,7 +10,8 @@ import {PythonShell} from 'python-shell';
 import axios from 'axios';
 import { uuid } from 'vue-uuid'
 import moment from 'moment';
-import fs from "fs";
+//import fs from "fs";
+import { promises as fs } from 'fs';
 import * as child from 'child_process';
 import {useDateFormat, useNow} from "@vueuse/core";
 import util from "util";
@@ -105,11 +106,51 @@ const connectedSockets = [
 //    })      
 //}
 
+// --- replace your getFTDIPath with this ---
 
-getFTDIPath().then(
-FTDIPath => {console.log("getFTDIPath() return "+ FTDIPath)
-FTDIPath = '/dev/ttyS0'
-setTimeout(() => {console.log("1 second timeout")
+
+async function pathExists(p) {
+  try { await fs.access(p); return true; } catch { return false; }
+}
+
+export async function resolveSerialPath() {
+  // 0) Let env win (easy to test/deploy)
+  if (process.env.SERIAL_PATH && await pathExists(process.env.SERIAL_PATH)) {
+    return process.env.SERIAL_PATH;
+  }
+
+  // 1) UART on GPIO (your setup)
+  const uartCandidates = ['/dev/serial0', '/dev/ttyAMA0', '/dev/ttyS0'];
+  for (const p of uartCandidates) {
+    if (await pathExists(p)) return p;
+  }
+
+  // 2) USB serial (Pico over USB or FTDI dongle)
+  // Prefer stable by-id if present (map it or rely on udev default)
+  const usbCandidates = [
+    '/dev/serial/by-id/usb-Raspberry_Pi_Pico-if00',
+    '/dev/serial/by-id/usb-Raspberry_Pi_Pico*',
+    '/dev/ttyACM0', '/dev/ttyACM1', '/dev/ttyUSB0', '/dev/ttyUSB1'
+  ];
+  for (const p of usbCandidates) {
+    if (await pathExists(p)) return p;
+  }
+
+  return null; // nothing found
+}
+
+const FTDIPath = await resolveSerialPath();
+console.log('Serial device:', FTDIPath);
+
+if (!FTDIPath) {
+  console.error('No serial device found. Map /dev/serial0 for UART or plug USB.');
+  process.exit(1);
+}
+
+const baud = Number(process.env.SERIAL_BAUD || 115200);
+
+
+
 init(() => {
     const output = new DigitalOutput('P1-16');
     const outputSpeakerPower = new DigitalOutput('P1-18');
@@ -129,7 +170,7 @@ init(() => {
          // You can perform any other actions here
      }
     });
-    const port = new SerialPort({ path: FTDIPath, baudRate: 115200 });
+    const port = new SerialPort({ path: FTDIPath, baudRate: baud });
     const parser =  new ReadlineParser({ delimiter: '\n'});
     port.pipe(parser);
     fetchData()
@@ -590,39 +631,8 @@ init(() => {
 //    })
     
 })
-}, 1000);
-})
-async function getFTDIPath() {
-    try {
-        const { stdout } = await exec('find /sys/bus/usb/devices/usb*/ -name dev');
-        const sysdevpaths = stdout.split('\n').filter(Boolean);
 
-        for (const sysdevpath of sysdevpaths) {
-            const syspath = sysdevpath.toString().replace(/\/dev(?!.*\/dev)/, "");
-            const { stdout: udevInfo } = await exec(`udevadm info -q property --export -p ${syspath}`);
-            const properties = udevInfo.split('\n').filter(Boolean);
 
-            const idSerialProperty = properties.find(prop => prop.startsWith('ID_SERIAL='));
-
-            if (idSerialProperty && idSerialProperty.includes('FTDI')) {
-                const devProperty =  properties.find(prop => prop.startsWith('DEVNAME='));
-                if(devProperty && devProperty.includes('ttyUSB')){
-                   const match = devProperty.match(/'([^']+)'/);
-                   if(match){
-                    return match[1]
-                   }
-                }
-
-            }
-        }
-        console.log("No FTDI device found");
-        // If no FTDI device found
-        return null;
-    } catch (error) {
-        console.error('Error retrieving device name:', error.message);
-        return null;
-    }
-}
 
 function callReset() {
     console.log("Begin callReset")
@@ -738,7 +748,7 @@ function buttonPress(button_number, output){
            new_press = false;
            current_button = button_number;
            let mp3_file_name = WaitMsgFiles[button_number-1];
-           playMP3("buzzer-1second.mp3");
+           //playMP3("buzzer-1second.mp3");
            setTimeout(() => {
              playMP3(mp3_file_name);
            }, 1500);
